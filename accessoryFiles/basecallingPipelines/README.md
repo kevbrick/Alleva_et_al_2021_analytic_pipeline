@@ -4,7 +4,7 @@
 These pipelines are built in nextflow (nextflow.io) and use either singularity or coda for package management. It has been tested using nextflow/20.10.0 and singularity/3.6.4. Earlier versions of nextflow will not work.
 
 ### ACCESSORY DATA: 
-The raw Pacbio CCS BAM files and Nanopore FAST5 files are available upon request. After discussion with the SRA / GEO, these files have not been included in public repositorys. For more information, please contact the authors. 
+The raw Pacbio CCS BAM files and Nanopore FAST5 files are available upon request. After discussion with the SRA / GEO, these files have not been included in public repositorys. For more information, please contact kevin.brick@nih.gov or the other authors. 
 
 ### RUN FOR NANOPORE: 
 Clone the repo. Modify the accessoryFiles/samples/ont.details.txt file to specify the folders for the FAST5 files for each ONT run. Then, from the source folder, run:
