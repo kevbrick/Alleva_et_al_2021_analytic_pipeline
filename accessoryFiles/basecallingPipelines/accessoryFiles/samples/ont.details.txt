@@ -1,0 +1,3 @@
+/data/RDCO/kevbrick/prdm9Pacbio/rawdata/run1_1d2/,run1_1d2,/data/RDCO/kevbrick/prdm9Pacbio/accessoryFiles/samples/PRDM9sequencingInfo.csv,/data/RDCO/kevbrick/prdm9Pacbio/runONT/pairs/read_detailsNONE.run1_1d2.txt
+/data/RDCO/kevbrick/prdm9Pacbio/rawdata/run2_1d2/,run2_1d2,/data/RDCO/kevbrick/prdm9Pacbio/accessoryFiles/samples/PRDM9sequencingInfo.csv,/data/RDCO/kevbrick/prdm9Pacbio/runONT/pairs/read_detailsNONE.run2_1d2.txt
+/data/RDCO/kevbrick/prdm9Pacbio/rawdata/run3_1d2/,run3_1d2,/data/RDCO/kevbrick/prdm9Pacbio/accessoryFiles/samples/PRDM9sequencingInfo.csv,/data/RDCO/kevbrick/prdm9Pacbio/runONT/pairs/read_detailsNONE.run3_1d2.txt
