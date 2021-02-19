@@ -6,13 +6,13 @@ params.help=""
 if (params.help) {
   log.info " "
   log.info "=========================================================================="
-  log.info "PRDM9 genotyping PIPELINE (Version 2.0)                                "
+  log.info "PRDM9 genotyping PIPELINE (Version 1.0)                                "
   log.info "=========================================================================="
   log.info " "
   log.info "USAGE: "
   log.info " "
   log.info "------------------------------------------------------------------------- "
-  log.info "nextflow run genotype_prdm9.nf "
+  log.info "nextflow run Alleva_et_al_2021_analytic_pipeline.nf "
   log.info " --reads         <string: Pacbio subreads BAM> "
   log.info " --outdir        <string: default = output> "
   log.info " --pipedir       <string: parent folder for accessoryFiles> "
@@ -30,8 +30,9 @@ params.accessorydir   = ""
 params.genomefa       = ""
 params.genomeidx      = ""
 params.npeaks         = 1000
-params.bigwinSize     = 1600
-params.centerSz       = 300
+params.bigwinSize     = 2000
+params.centerSz       = 1000
+params.RM             = true
 
 genomeFA  = file("${params.genomefa}")
 genomeIDX = file("${params.genomefa}.fai")
@@ -39,13 +40,13 @@ genomeIDX = file("${params.genomefa}.fai")
 //log.info
 log.info " "
 log.info "=========================================================================="
-log.info "PRDM9 genotyping PIPELINE (Version 1.0.1)                                "
+log.info "PRDM9 genotyping PIPELINE (Version 1.0)                                "
 log.info "=========================================================================="
 log.info " "
 log.info "USAGE: "
 log.info " "
 log.info "------------------------------------------------------------------------- "
-log.info "nextflow run genotype_prdm9.nf "
+log.info "nextflow run Alleva_et_al_2021_analytic_pipeline.nf "
 log.info " --pbfa          ${params.pbfa} "
 log.info " --ontfa (ONT)   ${params.ontfa} "
 log.info " --outdir        ${params.outdir} "
@@ -103,13 +104,6 @@ process merge_raw_fa {
 
   done
   """
-  //
-  // ## Split FASTA files to equal sized subfolders
-  // i=1
-  // while read l; do
-  //   mkdir -p faSplit_\$i
-  //   ln -s \$l faSplit_\$((i++))
-  // done< <(find -L `pwd` -name '*.pb_ont.raw.fa' | xargs -n 2)
 
   }
 
@@ -297,15 +291,17 @@ process drawFigure3{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
   publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
+  publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*tab'
 
   input:
   path(rtable)
   path(alleles)
 
   output:
-  path('Alleva_et_al_Fig*p*',         emit: mainFig)
-  path('Alleva_et_al_Sup*p*',         emit: suppFigs)
-  path('PrZFA_relatedness.human.tab', emit: rtab)
+  path('Alleva_et_al_Fig*p*',             emit: mainFig)
+  path('Alleva_et_al_Sup*p*',             emit: suppFigs)
+  path('PrZFA_relatedness.human.tab',     emit: rtab)
+  path('PrZFA.paths_between_alleles.txt', emit: pathDets)
 
   """
   ln -s ${params.accessorydir} accessoryFiles
@@ -313,9 +309,12 @@ process drawFigure3{
   grep event PrZFA_relatedness_ALLhuman.tab       |head -n1                                        >PrZFA_relatedness.human.tab
   sort -k1,1 -k2,2 PrZFA_relatedness_ALLhuman.tab |grep -v event |perl -lane 'print \$_ if (\$_)' >>PrZFA_relatedness.human.tab
 
+  perl accessoryFiles/scripts/makeCytoscapeTable.pl 1 >dict.txt
+  python3 accessoryFiles/scripts/find_path_between_alleles.py 3 prdm9_haplotypes.final.tab >PrZFA.paths_between_alleles.txt
+
   grep -P 'TRUE\\s*\$' PrZFA_alleles.txt >PrZFA_alleles.foundInPops.txt
 
-  cp accessoryFiles/scripts/genericFunctions.R . 
+  cp accessoryFiles/scripts/genericFunctions.R .
 
   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure3.R
   rm -f Rplots.pdf

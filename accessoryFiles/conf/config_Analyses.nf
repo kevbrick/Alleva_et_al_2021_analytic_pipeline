@@ -77,8 +77,8 @@ process{
 
   withName:drawFigure3{
     cpus = { 1 }
-    memory = { 8.GB }
-    time = { 0.5.h * task.attempt}
+    memory = { 16.GB }
+    time = { 4.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
