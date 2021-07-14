@@ -34,6 +34,13 @@ process{
     clusterOptions = ' --partition=gpu --cpus-per-task=6 --mem=16g --gres=lscratch:500,gpu:p100:1 '
   }
 
+  withName:getBarcodes_ONT{
+    time           = { 24.h * task.attempt }
+    container	   = "docker://kevbrick/ont_guppybonito:3.1.5_0.23.0"
+    //module = 'guppy/3.1.5'
+    clusterOptions = ' --partition=gpu --cpus-per-task=6 --mem=16g --gres=lscratch:500,gpu:p100:1 '
+  }
+
   withName:splitIndividualsForBonito{
     time           = { 3.h * task.attempt }
     container      = "docker://kevbrick/ont_guppybonito:3.1.5_0.23.0"
@@ -48,10 +55,19 @@ process{
 
   withName:bonitoBasecall_ONT{
     time           = { 16.h * task.attempt }
-    container      = "docker://kevbrick/ont_guppybonito:3.1.5_0.23.0"
+    container	   = "docker://kevbrick/ont_guppybonito:3.1.5_0.23.0"
     clusterOptions = ' --partition=gpu --cpus-per-task=6 --mem=16g --gres=lscratch:500,gpu:p100:1 '
     //conda          = "${params.accessorydir}/conda/bonito_environment.yml"
   }
+
+  withName:bonitoBasecallSR_ONT{
+    time           = { 72.h * task.attempt }
+    //container	   = "docker://kevbrick/bonito:0.3.8"
+    module = "bonito"
+    clusterOptions = ' --partition=gpu --cpus-per-task=6 --mem=16g --gres=lscratch:500,gpu:p100:1 '
+    //conda          = "${params.accessorydir}/conda/bonito_environment.yml"
+  }
+
 
   withName:split_ONT1d_by_barcode{
     cpus = { 2 }
@@ -81,9 +97,9 @@ profiles {
       maxRetries = 1
       scratch = '/lscratch/$SLURM_JOBID'
       clusterOptions = ' --gres=lscratch:600 '
-      pollInterval = '1 min'
-      queueStatInterval = '2 min'
     }
+    executor.$slurm.pollInterval = '1 min'
+    executor.$slurm.queueStatInterval = '5 min'
   }
 
   local {

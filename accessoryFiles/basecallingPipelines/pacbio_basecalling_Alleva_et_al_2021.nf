@@ -6,13 +6,13 @@ params.help=""
 if (params.help) {
   log.info " "
   log.info "=========================================================================="
-  log.info "PRDM9 genotyping PIPELINE (Version 3.0)                                "
+  log.info "PRDM9 genotyping PIPELINE (Version 4.0)                                "
   log.info "=========================================================================="
   log.info " "
   log.info "USAGE: "
   log.info " "
   log.info "------------------------------------------------------------------------- "
-  log.info "nextflow run genotype_prdm9.v3.0.nf "
+  log.info "nextflow run genotype_prdm9.v4.0.nf "
   log.info " --pb            <string: Pacbio subreads BAMs> "
   log.info " --outdir        <string: default = output> "
   log.info " --pipedir       <string: parent folder for accessoryFiles> "
@@ -31,7 +31,7 @@ params.accessorydir = ""
 //log.info
 log.info " "
 log.info "=========================================================================="
-log.info "PRDM9 genotyping PIPELINE (Version 3.0)                                "
+log.info "PRDM9 genotyping PIPELINE (Version 4.0)                                "
 log.info "=========================================================================="
 log.info " "
 log.info "USAGE: "
@@ -79,19 +79,17 @@ process call_ccs {
   publishDir "${params.outdir}/ccs", pattern: '*txt', mode: 'copy', overwrite: false
   publishDir "${params.outdir}/ccs", pattern: '*tab', mode: 'copy', overwrite: false
 
-  tag { bam }
+  tag { expt }
 
   input:
-  tuple path(rawbam), val(expt), path(f1), path(ccspath), path(dmxpath)
+  tuple path(rawbam), val(expt), path(f1), path(ccspath), val(dmxpath)
 
   output:
-  tuple(path('*.bam'), path('*.pbi'), val (expt), path('name*tab'), path(dmxpath), emit: bam)
+  tuple(path('*ccs_reads.bam'), path('*ccs_reads.bam.pbi'), val (expt), path('name*tab'), val(dmxpath), emit: bam)
   path('name*tab', emit: nametab)
   path('*ccs_report.txt', emit: report)
 
   script:
-  //def randprefix = new Random().with {(1..30).collect {(('a'..'z')).join()[ nextInt((('a'..'z')).join().length())]}.join()}
-  //def name = bam.name.replaceFirst(/.subreads/,'')
   def outBAM   = expt + ".ccs_reads.bam"
   def outRep   = expt + ".ccs_report.txt"
   """
@@ -113,10 +111,10 @@ process call_ccs {
 
 process demultiplex {
 
-  publishDir "${params.outdir}/fa/raw/${expt}", pattern: '*.fa'  , mode: 'copy', overwrite: false
-  publishDir "${params.outdir}/dmx/${expt}",    pattern: '*.bam*', mode: 'copy', overwrite: false
-  publishDir "${params.outdir}/dmx/${expt}",    pattern: '*.xml*', mode: 'copy', overwrite: false
-  publishDir "${params.outdir}/dmx/${expt}",    pattern: '*lima*', mode: 'copy', overwrite: false
+  //publishDir "${params.outdir}/fa/raw/${expt}", pattern: '*.fa'  , mode: 'copy', overwrite: false
+  //publishDir "${params.outdir}/dmx/${expt}",    pattern: '*.bam*', mode: 'copy', overwrite: false
+  //publishDir "${params.outdir}/dmx/${expt}",    pattern: '*.xml*', mode: 'copy', overwrite: false
+  //publishDir "${params.outdir}/dmx/${expt}",    pattern: '*lima*', mode: 'copy', overwrite: false
 
   tag { bam }
 
@@ -125,8 +123,8 @@ process demultiplex {
   path(popFile)
 
   output:
-  path('*raw.fa', emit: fa)
-  tuple(path('*bam'),  path('*pbi'),  path('*xml') , emit: bam)
+  //path('*raw.fa', emit: fa)
+  tuple(path('*bam'),  path('*pbi'),  path('*xml'), val(expt), path(conversiontable), emit: bam)
   path('*lima.counts', emit: dmxCountRep)
   path('*lima.summary', emit: dmxSummary)
   path('all_barcodes_BA.fa', emit: barcodes)
@@ -157,40 +155,149 @@ process demultiplex {
 
     lima --ccs --guess 45 --peek 10000 --guess-min-count 5 --different --score-full-pass --split-bam-named ${bam} all_barcodes_BA.fa ${outDMX}
 
-    ## Check that we get reciprocal barcodes - same nubers each side ...
-    perl ${params.accessorydir}/scripts/filter_CCS_with_good_demultiplexing.pl --p ${popFile} --n ${conversiontable} --e ${expt}
   fi
   """
-  // ##for b in *demux*.bam; do
-  // ##  perl ${params.accessorydir}/scripts/fixNames.pl \$b ${prefix}".exp_".${expt}
-  // ##done
-  // ## Check that we get reciprocal barcodes - same nubers each side ...
-  // ##for b in ${prefix}".exp_".${expt}*BC*bam; do
-  // ##  nm=\${b/.bam/};
-  // ##  samtools view \$b |cut -f10 |perl -lane 'print ">\$nm_ccs_".(++\$c)."\\n\$_"' >\$nm".fa"
-  // ##done
-  // ##perl ${params.accessorydir}/scripts/convertBarcodeToIndividualName.pl ${expt} ${conversiontable}
+}
+
+process dmxBAMtoFA {
+
+  publishDir "${params.outdir}/fa/raw/${expt}", pattern: '*.fa'  , mode: 'copy', overwrite: false
+  publishDir "${params.outdir}/dmx/${expt}",    pattern: '*.bam*', mode: 'copy', overwrite: false
+
+  tag { bam }
+
+  input:
+  tuple path(bam), path(pbi), path(xml), val(expt), path(conversiontable)
+  path(popFile)
+
+  output:
+  path('*raw.fa', emit: fa)
+  tuple(path('*bam'),  path('*pbi'),  path('*xml') , emit: bam)
+
+  shell:
+  //  #perl ${params.accessorydir}/scripts/filter_CCS_with_good_demultiplexing.pl --p ${popFile} --n ${conversiontable} --e ${expt}
+  '''
+  #!/usr/bin/perl
+  use strict;
+
+  my $popFile = "!{popFile}";
+  my $nameFile = "!{conversiontable}";
+  my $exptName = "!{expt}";
+
+  ## GET INDIVIDUAL DETAILS########################################
+  my %pop;
+
+  open POP, $popFile;
+
+  while (<POP>){
+    chomp;
+    my ($pop,$popid,$id,$sex)  = split(/\\t/,$_);
+
+    $pop{$id}->{popid} = $popid;
+    $pop{$id}->{pop}   = $pop;
+    $pop{$id}->{sex}   = $sex;
   }
 
-// process gatherCCSDemuxFAs {
-//
-//   publishDir "${params.outdir}/fa/merge", mode: 'copy', overwrite: true
-//
-//   input:
-//   path(fa)
-//   path(conversiontable)
-//
-//   output:
-//   path('*raw.fa', emit: fa)
-//
-//   """
-//   for nm in `cut -d, -f1 ${conversiontable} |grep -v id |uniq`; do
-//     for fa in `find -maxdepth 1 -name "*\$nm*fa"`; do
-//       perl -lane 'if (\$_ =~ /^>/){print "\\>".(++\$c)."\\|'\$fa'"}else{print \$_}' \$fa >>\$nm".raw.fa"
-//     done
-//   done
-//   """
-//   }
+  close POP;
+
+  ## GET NAME TO BARCODE TABLE#####################################
+  my %names;
+  my %edate;
+
+  open NM, $nameFile;
+
+  while (<NM>){
+    chomp;
+  	next unless ($_ =~ /($exptName)/);
+
+    my ($name,$bc2,$bc1,$expt,$edate)  = split(/,/,$_);
+
+    ## prevent slashes in name
+    $name =~ s/[\\/\\\\]/_/g;
+
+    $names{$bc1."_".$bc2} = $name;
+    $edate{$expt} = $edate;
+  }
+
+  close NM;
+
+  #################################################################
+  ## Loop through all demultiplexed BAMs
+  opendir(DIR,'.');
+
+  while (my $f = readdir(DIR)){
+
+  	next unless ($f =~ /BC.+BC.+\\.bam$/);
+
+  	my $bam    = $f;
+  	my $bamChk = $bam;
+
+  	$bamChk =~ s/BC(\\d+)_([FR])_BC(\\d+).+BC(\\d+)_([FR])_BC(\\d+)//;
+
+  	my ($bc1A,$fr1,$bc1B,$bc2A,$fr2,$bc2B) = ($1,$2,$3,$4,$5,$6);
+
+  	my ($b1,$b2) = ($bc1A."_".$bc1B, $bc2A."_".$bc2B);
+
+  	## DMX good IF: Same names and FR/RF orientation
+  	if ($b1 eq $b2 && $fr1 ne $fr2){
+
+  		my $name = $names{$b1};
+
+  		if (!$pop{$name}){
+        $pop{$name}->{popid} = 'other';
+        $pop{$name}->{pop}   = 'OTH';
+        $pop{$name}->{sex}   = 'MALE';
+      }
+
+      $name     = join("_",$name,$pop{$name}->{pop},$bc1A,$bc1B,uc($pop{$name}->{sex}) eq "MALE"?"M":"F");
+
+  		my $xml = $bam;
+  		$xml =~ s/\\.bam/\\.subreadset.xml/;
+
+  		my $newbam    = $name."_".$exptName.".demux.bam";
+  		my $newbampbi = $name."_".$exptName.".demux.bam.pbi";
+  		my $newxml    = $name."_".$exptName.".subreadset.xml";
+      my $newfa     = $name."_".$exptName.".raw.fa";
+
+  		system("cp $bam $newbam");
+  		system("cp $bam.pbi $newbampbi");
+     	system("cp $xml ".$name."_".$exptName.".subreadset.xml");
+
+      //system("for f in `samtools view $newbam |cut -f1,10`; do echo $f >>tmp$newfa; done")
+      //system("sed \\'1~2s/^/>/\\' $tmpfa |fold -w84 >$newfa")
+  		open FA, '>', $newfa;
+
+  		my $seqCnt;
+  		open my $IN, '-|', "samtools view $newbam |cut -f1,10";
+  		while (<$IN>){
+  			chomp;
+        my @D = split(/\\t/,$_);
+  			print FA ">".$name."_".$exptName."|$D[0]\\n";
+  			print FA to84($D[1]);
+  		}
+  		close FA; close $IN;
+  	}else{
+  		my $newbam = $bam; $newbam =~ s/demux.bam/demuxBAD.bam/;
+  		system("cp $bam $newbam");
+  		system("cp $bam.pbi $newbam.pbi");
+  		my $xml = $bam;    $xml       =~ s/\\.bam/\\.subreadset.xml/;
+  		my $xml = $newbam; my $newxml =~ s/\\.bam/\\.subreadset.xml/;
+  		system("cp $xml $newxml");
+  	}
+  }
+
+  sub to84{
+    my $inLine = shift;
+    my $lnRet;
+    while ($inLine =~ s/^(.{84})//){
+      $lnRet .= $1."\\n";
+    }
+    $lnRet .= $1."\\n";
+    return($lnRet);
+  }
+
+  '''
+  }
 
 process merge_raw_fa {
   publishDir "${params.outdir}/fasta/rawmerged", pattern: '*.fa', mode: 'copy', overwrite: true
@@ -277,17 +384,14 @@ workflow getPacbioRawFastas {
     take: rundataPB
 
     main:
-    //expDets   = getNamedExptChannelPB(rundataPB)
     prdata    = get_known_human_prdm9_data()
 
     ccsbam    = call_ccs(rundataPB)
     dmx       = demultiplex(ccsbam.bam, prdata.popData)
-    //dmx       = gatherCCSDemuxFAs(demuxInit.fa.collect(), ccsbam.nametab)
-
-    //zfFA      = extractZFsfromRawFA(dmx.faGrp.flatten(),'PB',prdata.hsZFs,prdata.hsAlleles)
+    indiv     = dmxBAMtoFA(dmx.bam,prdata.popData)
 
     emit:
-    allfa      = dmx.fa.flatten()
+    allfa      = indiv.fa.flatten()
     pubZFs     = prdata.hsZFs
     pubAlleles = prdata.hsAlleles
   }
@@ -296,8 +400,17 @@ workflow getPacbioRawFastas {
 // MAIN WORKFLOW
 workflow {
 
+//  pbIn  = Channel.fromPath(params.inPB).splitCsv(header:false, sep: ",", by: 1)
+//                 .map { sample -> tuple(file(sample[0]), sample[1], file(sample[2]), file(sample[3]), file(sample[4])) }
+
   pbIn  = Channel.fromPath(params.inPB).splitCsv(header:false, sep: ",", by: 1)
-                 .map { sample -> tuple(file(sample[0]), sample[1], file(sample[2]), file(sample[3]), file(sample[4])) }
+                 .map{row ->
+                     def input_bam  = row[0]
+                     def input_name = row[1]
+                     def id_table   = row[2]
+                     def ccs_folder = row[3]
+                     def dmx_folder = row[4]
+                     return [ file(input_bam), input_name, file(id_table), file(ccs_folder), file(dmx_folder) ]}
 
   raw   = getPacbioRawFastas(pbIn)
 

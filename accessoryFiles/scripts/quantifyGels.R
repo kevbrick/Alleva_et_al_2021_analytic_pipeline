@@ -52,7 +52,7 @@ quantifyGel <- function(img, cropX, cropY, nLanes, names, ladderLanes = 1, showL
   ## Cropping distances must be specified a-priori
   ## No autodetection ...
   imgGel <- crop.borders(imgRaw, nx = cropX, ny = cropY, nz = 0)
-  
+
   ## Get the width of the cropped image
   nImageWidth <- dim(imgGel)[2]
   
@@ -215,7 +215,7 @@ quantifyGel <- function(img, cropX, cropY, nLanes, names, ladderLanes = 1, showL
 }
 
 ### Plot gel vs reads vs ZFs for select samples
-plotGelVReadsVZFs <- function(dfIntensity, dfGel, ids){
+plotGelVReadsVZFs <- function(dfIntensity, dfGel, ids, nGroups=2){
   dfZF       <- fread('allZFAsizes.txt',header=TRUE)
   dfReadLens <- fread('allReadLengths.txt',header=TRUE)
   
@@ -224,7 +224,7 @@ plotGelVReadsVZFs <- function(dfIntensity, dfGel, ids){
   ggList <- list()
   
   for (thisID in ids){
-    if (!grepl('Ladder',thisID)){
+    if (!grepl('(Ladder|none)',thisID)){
       noMarg <- theme(plot.margin=unit(c(0,0,0.5,0.5),'cm'))
       
       gI <- ggplot(dfIntensity[dfIntensity$laneName == thisID,],
@@ -317,53 +317,78 @@ plotGelVReadsVZFs <- function(dfIntensity, dfGel, ids){
   gPlotsA <- ggarrange(plotlist = ggList[1:nHalf],ncol=4,nrow = ceiling(nHalf/4))
   gPlotsB <- ggarrange(plotlist = ggList[(nHalf+1):nTot],ncol=4, nrow = ceiling((nTot-nHalf)/4))
   
+  gGroups <- list()
+  for (n in 1:ceiling(length(ggList)/nGroups)){
+    nfrom <- 1 + (n-1)*nGroups
+    nto   <- nGroups*n
+    
+    gGroups[[n]] <- ggarrange(plotlist = ggList[nfrom:nto],ncol=4,nrow = nGroups/4)
+  }
+
   return(list(plotsList = ggList,
               gAll = gAllPlots,
               gSetA = gPlotsA,
-              gSetB = gPlotsB))
+              gSetB = gPlotsB,
+              gGrp = gGroups))
 }
 
 ## IMG 1 ####################################################################
-gQuantImg1 <- quantifyGel(img = "SuppGelFigure_justGel.jpg",
-                          cropX = 6, 
-                          cropY = 40, 
-                          nLanes = 17,
-                          names = c('Ladder',
-                                    'NA18877',
-                                    'NA18881',
-                                    'NA18908',
-                                    'NA18909',
-                                    'NA18910',
-                                    'NA18912',
-                                    'NA18913',
-                                    'NA18915',
-                                    'NA18923',
-                                    'NA18933',
-                                    'NA18934',
-                                    'NA19092',
-                                    'NA19093',
-                                    'NA19095',
-                                    'NA19096',
-                                    'NA19099'),
-                          ladderLanes = 1)
+## From original submission
+# gQuantImg1 <- quantifyGel(img = "SuppGelFigure_justGel.jpg",
+#                           cropX = 6, 
+#                           cropY = 40, 
+#                           nLanes = 17,
+#                           names = c('Ladder',
+#                                     'NA18877',
+#                                     'NA18881',
+#                                     'NA18908',
+#                                     'NA18909',
+#                                     'NA18910',
+#                                     'NA18912',
+#                                     'NA18913',
+#                                     'NA18915',
+#                                     'NA18923',
+#                                     'NA18933',
+#                                     'NA18934',
+#                                     'NA19092',
+#                                     'NA19093',
+#                                     'NA19095',
+#                                     'NA19096',
+#                                     'NA19099'),
+#                           ladderLanes = 1)
 
-### old order
-# 'NA18871',
-# 'NA18923',
-# 'NA18873',
-# 'NA18924', 
-# 'NA18877', 
-# 'NA18933',
-# 'NA18881', 
-# 'NA18934', 
-# 'NA18909', 
-# 'NA19092',
-# 'NA18915', 
-# 'NA19095',
-# 'NA18916',
-# 'NA19096', 
-# 'NA18917', 
-# 'NA19099'),
+## For revision
+gQuantImg1 <- quantifyGel(img = "SuppGelFigure_justGel.jpg",
+                          cropX = 0, 
+                          cropY = 0, 
+                          nLanes = 26,
+                          names = c('Ladder',
+                                    "NA18873",
+                                    "NA18923",
+                                    "NA18874",
+                                    "NA18924",
+                                    "NA18877",
+                                    "NA18933",
+                                    "NA18881",
+                                    "NA18934",
+                                    "NA18907",
+                                    "NA19092",
+                                    "NA18908",
+                                    "NA19093",
+                                    "NA18909",
+                                    "NA19095",
+                                    "NA18910",
+                                    "NA19096",
+                                    "NA18912",
+                                    "NA19098",
+                                    "NA18913",
+                                    "NA19099",
+                                    "NA18915",
+                                    "NA19101",
+                                    "NA18916",
+                                    "none",
+                                    "NA18917"),
+                          ladderLanes = 1)
 
 gFigI1 <- ggarrange(gQuantImg1$gGel,
                     ggplot() + theme_void(),
@@ -415,17 +440,17 @@ ggsave('Alleva_et_al_PrZFA_Img2Quantified_JustGelData.pdf',gFigI2,height=8,width
 gCompleteGels <- ggarrange(gQuantImg1$gGel,gQuantImg2$gGel,ncol=1,nrow=2,labels=c('A','B'),font.label=list(size=8,face='bold'))
 
 idList <- unique(gQuantImg1$data$laneName)
-lstQuants1 <- plotGelVReadsVZFs(gQuantImg1$data,gQuantImg1$gelData,idList)
+lstQuants1 <- plotGelVReadsVZFs(gQuantImg1$data,gQuantImg1$gelData,idList,nGroups = 8)
 
 idList <- unique(gQuantImg2$data$laneName)
-lstQuants2 <- plotGelVReadsVZFs(gQuantImg2$data,gQuantImg2$gelData,idList)
+lstQuants2 <- plotGelVReadsVZFs(gQuantImg2$data,gQuantImg2$gelData,idList,nGroups = 8)
 
 ## Make PNGs ##############################################################
 nHeight <- 9.5
 ggsave('Alleva_et_al_PrZFA_Gel1.png',
        ggarrange(gQuantImg1$gGel,
                  ggplot() + theme_void(),
-                 lstQuants1$gSetA,
+                 lstQuants1$gGrp[[1]],
                  labels=c("A",'','B'),
                  ncol=1,nrow=3,
                  heights=c(1,0.2,4),
@@ -433,7 +458,11 @@ ggsave('Alleva_et_al_PrZFA_Gel1.png',
        height=nHeight,width=7,dpi=500)
 
 ggsave('Alleva_et_al_PrZFA_Gel1_Part2.png',
-       lstQuants1$gSetB,
+       lstQuants1$gGrp[[2]],
+       height=nHeight*4/5.2,width=7,dpi=500)
+
+ggsave('Alleva_et_al_PrZFA_Gel1_Part3.png',
+       lstQuants1$gGrp[[3]],
        height=nHeight*4/5.2,width=7,dpi=500)
 
 ggsave('Alleva_et_al_PrZFA_Gel2.png',
@@ -454,7 +483,7 @@ ggsave('Alleva_et_al_PrZFA_Gel2_Part2.png',
 ggsave('Alleva_et_al_PrZFA_Gel1.pdf',
        ggarrange(gQuantImg1$gGel,
                  ggplot() + theme_void(),
-                 lstQuants1$gSetA,
+                 lstQuants1$gGrp[[1]],
                  labels=c("A",'','B'),
                  ncol=1,nrow=3,
                  heights=c(1,0.2,4),
@@ -462,7 +491,11 @@ ggsave('Alleva_et_al_PrZFA_Gel1.pdf',
        height=nHeight,width=7)
 
 ggsave('Alleva_et_al_PrZFA_Gel1_Part2.pdf',
-       lstQuants1$gSetB,
+       lstQuants1$gGrp[[2]],
+       height=nHeight*4/5.2,width=7)
+
+ggsave('Alleva_et_al_PrZFA_Gel1_Part3.png',
+       lstQuants1$gGrp[[3]],
        height=nHeight*4/5.2,width=7)
 
 ggsave('Alleva_et_al_PrZFA_Gel2.pdf',

@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use charnames qw[ :full ];
 
-my (%zfs, %zfseq, %zfsrc, %zfseqchk, %allZFalleles);
+my (%zfs, %zfseq, %zfsrc, %zfseqchk, %allZFalleles, %bloodSpermAlleles);
 
 my $newAlleleName = 0;
 my $newAlleleID; 
@@ -17,9 +17,10 @@ getAllelesFromJeffreys2012();
 getZFsFromBaudat2010();
 
 ## OUTPUT ALLELES
-open ALLELESBYCODE, '>', 'humanPRDM9alleles.BergJeffreys.txt';
-open ALLELESEQRAW,  '>', 'humanPRDM9alleles.BergJeffreys.withSeq.txt';
-open ALLELESFASTA,  '>', 'humanPRDM9alleles.BergJeffreys.fa';
+open ALLELESBYCODE,     '>', 'humanPRDM9alleles.BergJeffreys.txt';
+open ALLELESEQRAW,      '>', 'humanPRDM9alleles.BergJeffreys.withSeq.txt';
+open ALLELESFASTA,      '>', 'humanPRDM9alleles.BergJeffreys.fa';
+open BLOODSPERMALLELES, '>', 'humanPRDM9alleles.BloodandSpermVariants.txt';
 
 for my $zfs(sort(keys(%allZFalleles))) {
   print ALLELESBYCODE join("\t", $allZFalleles{$zfs}, $zfs)."\n";
@@ -38,6 +39,20 @@ for my $zf(sort(keys(%zfseq))) {
   print ALLZFCODES join("\t",$zf,$zfs{$zf},$zfsrc{$zf},$zfseq{$zf})."\n";
 }
 close ALLZFCODES;
+
+## OUTPUT BLOOD & SPERM ALLELES
+for my $man(sort keys(%bloodSpermAlleles)){
+  for my $allele(sort keys(%{$bloodSpermAlleles{$man}})){
+    my $alleleName = $allZFalleles{$allele};
+    unless ($man =~ /(M\d+[BS]:$alleleName\-|M\d+[BS]:\S+?\-$alleleName)/){
+      for my $i (1..$bloodSpermAlleles{$man}->{$allele}){
+        print BLOODSPERMALLELES join("\t",$man,$allele,$alleleName)."\n";
+      }
+    }
+  }
+}
+
+close BLOODSPERMALLELES;
 
 #########################################################################################################
 sub getZFsFromBerg2010{
@@ -209,8 +224,8 @@ sub getAllelesFromJeffreys2012{
   while (<$PIPE>){
     chomp;
     if ($_ =~ /Man\s+(\d+),\s+PRDM9\s+(\S+?)\/(\S+),\s(\S+)\smutant/){
-	my $type = $4 eq 'sperm'?"S":"B";
-	$newAlleleID = "M$1$type:$2-$3";
+      my $type = $4 eq 'sperm'?"S":"B";
+      $newAlleleID = "M$1$type:$2-$3";
     }
 
     next unless ($_ =~ /^\s*(1\-\-|A\S*[BDEFJ])/);
@@ -245,6 +260,8 @@ sub storeAllele{
 
   my $allele_code = convertAlleleCode(split(//,$allele_seq));
 
+  $bloodSpermAlleles{$newAlleleID}->{$allele_code}++;
+  
   return if ($allZFalleles{$allele_code});
 
   my @F = split(/\s+/,$allele_dets);

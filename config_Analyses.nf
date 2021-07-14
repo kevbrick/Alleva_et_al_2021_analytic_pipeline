@@ -32,6 +32,7 @@ process{
     cpus = { 2 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt }
+    //container = "docker://kevbrick/parsetools:1.0"
   }
 
   withName:merge_raw_fa{
@@ -43,7 +44,7 @@ process{
   withName:extractZFsfromRawFA{
     cpus = { 1 }
     memory = { 16.GB }
-    time = { 4.h * task.attempt}
+    time = { 9.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
@@ -54,14 +55,42 @@ process{
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
+  withName:checkTrios{
+    cpus = { 2 }
+    memory = { 8.GB }
+    time = { 0.5.h * task.attempt}
+    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  }
+  
   withName:genotypeVsZFlengthDistributions{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
+  
+  withName:parseNewGTsONLY{
+    cpus = { 1 }
+    memory = { 2.GB }
+    time = { 0.25.h * task.attempt}
+    container = "docker://kevbrick/alleva_shortreadvalidation:1.0"
+  }
+
+  withName:checkNewAllelesWithShortReads{
+    cpus = { 4 }
+    memory = { 16.GB }
+    time = { 4.h * task.attempt}
+    container = "docker://kevbrick/alleva_shortreadvalidation:1.0"
+  }
 
   withName:drawFigure1{
+    cpus = { 1 }
+    memory = { 8.GB }
+    time = { 0.5.h * task.attempt}
+    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  }
+
+  withName:drawFigure1_1D2{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt}
@@ -72,35 +101,56 @@ process{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt}
+    container = "docker://kevbrick/alleva_r:2.0"
+  }
+
+  // withName:drawFigure3{
+  //   cpus = { 1 }
+  //   memory = { 8.GB }
+  //   time = { 0.5.h * task.attempt}
+  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  // }
+
+  withName:drawRelatednessFigure{
+    cpus = { 1 }
+    memory = { 8.GB }
+    time = { 1.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
-  withName:drawFigure3{
+  withName:drawShortReadValidationFig{
     cpus = { 1 }
     memory = { 8.GB }
-    time = { 0.5.h * task.attempt}
+    time = { 1.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
-
-  withName:drawFigure4{
+  
+  withName:drawHotspotsFigure{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt}
-    container = "docker://kevbrick/alleva_r:1.0"
+    container = "docker://kevbrick/alleva_r:2.0"
   }
 
-  withName:drawFigure3MMSupp{
-    cpus = { 1 }
-    memory = { 8.GB }
-    time = { 0.5.h * task.attempt}
-    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  }
+  // withName:drawFigure3MMSupp{
+  //   cpus = { 1 }
+  //   memory = { 8.GB }
+  //   time = { 0.5.h * task.attempt}
+  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  // }
 
   withName:drawGelQuantificationFigure{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt}
     container = "docker://kevbrick/gelquant:1.0"
+  }
+
+  withName:analyzeDiscordancesPB_v_ONT{
+    cpus = { 1 }
+    memory = { 8.GB }
+    time = { 1.h * task.attempt}
+    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
   withName:getMousePrZFAs{
@@ -120,7 +170,21 @@ process{
   withName:inferRelatednessOfAlleles{
     cpus = { 1 }
     memory = { 8.GB }
-    time = { 8.h * task.attempt}
+    time = { 28.h * task.attempt}
+    container = "docker://kevbrick/alleva_inferrelatedness:1.0"
+  }
+
+  withName:getLinkedAlleles{
+    cpus = { 4 }
+    memory = { 16.GB }
+    time = { 2.h * task.attempt}
+    container = "docker://kevbrick/alleva_plink:2.0"
+  }
+
+  withName:drawAssociationsFigure{
+    cpus = { 1 }
+    memory = { 8.GB }
+    time = { 1.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
@@ -130,6 +194,33 @@ process{
     time = { 6.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
+
+  // withName:assessZFsThatBindSimilarSequences{
+  //   cpus = { 1 }
+  //   memory = { 8.GB }
+  //   time = { 6.h * task.attempt}
+  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  // }
+
+  withName:dnaToPeptide{
+    cpus = { 1 }
+    memory = { 8.GB }
+    time = { 1.h * task.attempt}
+    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  }
+
+  withName:makeACtypesPlot{
+    cpus = { 1 }
+    memory = { 8.GB }
+    time = { 2.h * task.attempt}
+    container = "docker://kevbrick/alleva_r:2.0"
+  }
+  // withName:determineAORCtype{
+  //   cpus = { 1 }
+  //   memory = { 8.GB }
+  //   time = { 1.h * task.attempt}
+  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
+  // }
 
   withName:processHumanHotspots{
     cpus = { 2 }

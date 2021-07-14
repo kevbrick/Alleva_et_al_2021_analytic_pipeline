@@ -25,6 +25,7 @@ if (params.help) {
 params.outdir         = ""
 params.pbfa           = ""
 params.ontfa          = ""
+params.bonito1dfa     = ""
 params.accessorydir   = ""
 
 params.genomefa       = ""
@@ -47,10 +48,11 @@ log.info "USAGE: "
 log.info " "
 log.info "------------------------------------------------------------------------- "
 log.info "nextflow run Alleva_et_al_2021_analytic_pipeline.nf "
-log.info " --pbfa          ${params.pbfa} "
-log.info " --ontfa (ONT)   ${params.ontfa} "
-log.info " --outdir        ${params.outdir} "
-log.info " --accessorydir  ${params.accessorydir} "
+log.info " --pbfa             ${params.pbfa} "
+log.info " --ontfa (ONT)      ${params.ontfa} "
+log.info " --bonito1dfa (ONT) ${params.bonito1dfa} "
+log.info " --outdir           ${params.outdir} "
+log.info " --accessorydir     ${params.accessorydir} "
 log.info " "
 log.info "=========================================================================="
 
@@ -81,6 +83,21 @@ process get_known_human_prdm9_data {
     perl -lane 'if (s/^.+((HG|NA)\\d+).+?(female|male).+/"'\$2'\\t'\$1'\\t\$1\\t".lc(\$3)/ie){print \$_}' \$1.tab |sort -k2,2 >>individuals.1KG.tab
   done
 
+  """
+  }
+
+process get_jeffreys_blood_and_sperm_variants_only {
+
+  publishDir "output/publishedData", mode: 'copy', overwrite: true
+
+  output:
+  path('humanPRDM9alleles.BloodandSpermVariants.txt',  emit: alleles)
+
+  """
+  cp ${params.accessorydir}/scripts/getPRDM9ZFs_JeffreysAndBerg.pl .
+  cp ${params.accessorydir}/scripts/replaceUnicode .
+
+  perl getPRDM9ZFs_JeffreysAndBerg.pl
   """
   }
 
@@ -132,7 +149,7 @@ process extractZFsfromRawFA{
   ## export PERL5LIB=\$PERL5LIB:\$CONDA_PREFIX"/lib/perl5/site_perl/5.22.0/"
   export PERL5LIB="/opt/conda/envs/parsePRDM9RE/lib/site_perl/5.26.2"
 
-  for fa in *.fa; do
+  for fa in *.fa; do 
     id=`basename \$fa |perl -pi -e 's/^(\\S+?_\\S\\S\\S).+\$/\$1/'`
 
     perl ${params.accessorydir}/scripts/extractPRDM9ZFsFromFA.pl \
@@ -180,7 +197,7 @@ process makeHaplotypeTable{
   """
   perl ${params.accessorydir}/scripts/gatherHaps.pl >allhap.txt
 
-  echo -e `grep allele_1_code allhap.txt`"\\tnseqs\\tnzfseqs" |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' >prdm9_haplotypes.${type}.tab
+  echo -e `grep allele_1_code allhap.txt`"\\tnseqs\\tnzfseqs" |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' >prdm9_haplotypes.${type}.tmp
 
   for f in *.fa; do
 
@@ -191,9 +208,9 @@ process makeHaplotypeTable{
         sz=`grep -P "^\\>" \$f |wc -l`
         zfsz=`cat \$nm*ZFs.fa |grep \\> |wc -l`
 
-        hap=`grep \$nm allhap.txt`
+        hap=`grep \$nm allhap.txt |head -n1`
 
-        echo -e "\$hap\\t\$sz\\t\$zfsz" >>prdm9_haplotypes.${type}.tab
+        echo -e "\$hap\\t\$sz\\t\$zfsz" >>prdm9_haplotypes.${type}.tmp
         echo "Processed \$nm ..."
       else
         echo "Skipping \$nm: No ZFs found ..."
@@ -201,11 +218,47 @@ process makeHaplotypeTable{
     fi
   done
 
+  grep YRI ${params.accessorydir}/pops/20140610_all_samples_with_children_no_quotes.ped |
+         perl -lane 'BEGIN{print join("\\t","child","mom","dad")};
+                     print join("\\t",@F[1..3]) if (\$F[2] && \$F[3])' >trio.txt
+
+  grep YRI ${params.accessorydir}/pops/20140610_all_samples_with_children_no_quotes.ped |
+        perl -lane 'print \$F[1] if (\$F[2] && \$F[3])' >kids.txt
+
+  grep -v -f kids.txt prdm9_haplotypes.${type}.tmp |perl -lane 'push @F, (\$_ =~ /allele_1_code/)?"is_child":"FALSE"; print join("\\t",@F)'  >withkids.tmp
+  grep    -f kids.txt prdm9_haplotypes.${type}.tmp |perl -lane 'push @F, "TRUE"; print join("\\t",@F)'                                      >>withkids.tmp
+
+  grep allele_1_code withkids.tmp                         >prdm9_haplotypes.${type}.tab
+  sort -k1,1         withkids.tmp |grep -v allele_1_code >>prdm9_haplotypes.${type}.tab
+
   touch newAlleles.txt
   touch newZFs.txt
   """
   }
 
+process checkTrios{
+  publishDir "${params.outdir}/haplotypesTable", mode: 'copy', overwrite: true
+
+  input:
+  path(haps)
+
+  output:
+  path('trio_haplotypes.tab', emit: hap)
+
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+
+  cp accessoryFiles/otherdata/mouse_PrZFA_alleles_in_Pubs.txt .
+  
+  grep YRI accessoryFiles/pops/20140610_all_samples_with_children_no_quotes.ped |
+         perl -lane 'BEGIN{print join("\\t","child","mom","dad")};
+                     print join("\\t",@F[1..3]) if (\$F[2] && \$F[3])' >trio.txt
+  
+  perl accessoryFiles/scripts/checkTrios.pl ${haps} trio.txt >trio_haplotypes.tab
+  
+  """
+  }
+  
 process genotypeVsZFlengthDistributions{
   publishDir "${params.outdir}/ZFlengths", mode: 'copy', overwrite: true
 
@@ -250,7 +303,108 @@ process getMousePrZFAs{
   """
   }
 
-process drawFigure1{
+process analyzeDiscordancesPB_v_ONT{
+  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
+  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
+
+  input:
+  path(bonito_dets)
+  path(pacbio_dets)
+
+  output:
+  path('Allev*.p??', emit: mmFig)
+
+  """
+  mkdir nanopore
+  mkdir pacbio
+
+  ln -s ${launchDir}/${params.outdir}/bonito1d/dets/*details.txt ./nanopore
+  ln -s ${launchDir}/${params.outdir}/pacbio/dets/*details.txt ./pacbio
+
+  ## GET ZFA sizes
+  echo -e "id\\tpop\\tsize" >nanopore_ZFAsizes.txt
+  echo -e "id\\tpop\\tsize" >pacbio_ZFAsizes.txt
+
+  for x in nanopore/*.prdm9_zf_array*details.txt; do
+    nm=`basename \$x`
+    name=`echo \${nm/.prdm9_zf_array*/} | perl -pi -e 's/_/","/' 2>/dev/null`
+    cat \$x |perl -lane 'if (\$_ =~ /ZF\\sCOUNT:\\s+(\\d+)/){
+                           print join("\\t","'\$name'",\$1)}' >>nanopore_ZFAsizes.txt
+  done
+
+  for x in pacbio/*.prdm9_zf_array*details.txt; do
+    nm=`basename \$x`
+    name=`echo \${nm/.prdm9_zf_array*/} | perl -pi -e 's/_/","/' 2>/dev/null`
+    cat \$x |perl -lane 'if (\$_ =~ /ZF\\sCOUNT:\\s+(\\d+)/){
+                           print join("\\t","'\$name'",\$1)}' >>pacbio_ZFAsizes.txt
+  done
+
+  R --no-save <${params.accessorydir}/scripts/drawDiscordantCallsFig.R
+  rm -f Rplots.pdf
+  """
+  }
+ 
+process parseNewGTsONLY {
+  input:
+  path(haplotypes)
+
+  output:
+  path("individuals_with_new_alleles.tab", emit: tab)
+
+  script:
+  """
+  grep -P '\\sM\\d+\\s' ${haplotypes} >individuals_with_new_alleles.tab
+  """
+  }
+
+process checkNewAllelesWithShortReads {
+
+  input:
+  path(haplotypes)
+  path(dets)
+
+  output:
+  path("shortreadvalidation*tab", emit: tab)
+
+  script:
+  def randID = new Random().with {(1..30).collect {(('a'..'z')).join()[ nextInt((('a'..'z')).join().length())]}.join()}
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+
+  cp accessoryFiles/scripts/validateNewAllelesWithShortReadData.pl .
+  #cp accessoryFiles/1KG/ftp_1KG.current.tree.June232021.txt ./ftp.current.tree
+  cp accessoryFiles/1KG/gs_1KG.tree ./ftp.current.tree
+  
+  perl validateNewAllelesWithShortReadData.pl --haps ${haplotypes} \
+                   --noprefix \
+                   --tree ftp.current.tree \
+                   --dets ${dets} >shortreadvalidation.${randID}.tab 
+  """
+  }
+
+process drawShortReadValidationFig {
+
+  publishDir "${params.outdir}/figures", mode: 'copy', overwrite: true
+  
+  input:
+  path(dets)
+
+  output:
+  path("Alleva*p??", emit: img)
+
+  script:
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+
+  cat shortreadvalidation*tab >allShortReadValidationData.tab
+  
+  R --no-save <${params.accessorydir}/scripts/drawAllevaShortReadValidationPlots.R
+  
+  rm -f Rplots.pdf
+  """
+  }
+  
+process drawFigure1_1D2{
   publishDir "${params.outdir}/figures", mode: 'copy', overwrite: true
 
   input:
@@ -265,6 +419,28 @@ process drawFigure1{
   ln -s ${params.accessorydir} accessoryFiles
 
   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure1.R
+  R --no-save <${params.accessorydir}/scripts/drawAllevaFigure1.R
+  rm -f Rplots.pdf
+  """
+  }
+
+process drawFigure1{
+  publishDir "${params.outdir}/figures", mode: 'copy', overwrite: true
+
+  input:
+  path(bonito_dets)
+  path(pacbio_dets)
+
+  output:
+  path('*png', emit: png)
+  path('*pdf', emit: pdf)
+
+  """
+  ln -s ${params.accessorydir} accessoryFiles 
+  
+  cp prdm9_haplotypes.bonito1d.tab prdm9_haplotypes.bonito.tab
+  
+  R --no-save <${params.accessorydir}/scripts/drawAllevaFigure1.R
   rm -f Rplots.pdf
   """
   }
@@ -274,6 +450,7 @@ process drawFigure2{
 
   input:
   path(dets)
+  path(allele_AorCtypes)
 
   output:
   path('Alleva*png', emit: png)
@@ -281,76 +458,110 @@ process drawFigure2{
 
   """
   ln -s ${params.accessorydir} accessoryFiles
+  
   cp accessoryFiles/scripts/genericFunctions.R .
 
+  cp ${allele_AorCtypes} atype_ctype.txt
+  
   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure2.R
   """
   }
 
-process drawFigure3{
+process drawAssociationsFigure{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
-  publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
-  publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*tab'
 
   input:
-  path(rtable)
-  path(alleles)
+  path(prdm9)
+  path(cmh)
+  path(type)
+  path(clust)
+  path(map)
+  path(snpseq)
 
   output:
-  path('Alleva_et_al_Fig*p*',             emit: mainFig)
-  path('Alleva_et_al_Sup*p*',             emit: suppFigs)
-  path('PrZFA_relatedness.human.tab',     emit: rtab)
-  path('PrZFA.paths_between_alleles.txt', emit: pathDets)
+  path('Alleva_et_al_Fig*p*',     emit: mainFig)
+  path('Alleva_et_al_Sup*p*',     emit: suppFigs)
+  path('Alleva_et_al_Associ*tab', emit: cmhTable)
 
   """
   ln -s ${params.accessorydir} accessoryFiles
 
-  grep event PrZFA_relatedness_ALLhuman.tab       |head -n1                                        >PrZFA_relatedness.human.tab
-  sort -k1,1 -k2,2 PrZFA_relatedness_ALLhuman.tab |grep -v event |perl -lane 'print \$_ if (\$_)' >>PrZFA_relatedness.human.tab
-
-  perl accessoryFiles/scripts/makeCytoscapeTable.pl 1 >dict.txt
-  python3 accessoryFiles/scripts/find_path_between_alleles.py 3 prdm9_haplotypes.final.tab >PrZFA.paths_between_alleles.txt
-
-  grep -P 'TRUE\\s*\$' PrZFA_alleles.txt >PrZFA_alleles.foundInPops.txt
-
+  for cmh in `ls *cmh`; do
+    head \$cmh -n1 |perl -lane 'chomp; print \$_."\\tphenotype"' >header.tab
+    phenotype=`echo \$cmh |perl -pi -e 's/prdm9AS\\.(.+?)\\.mod\\.cmh\$/\$1/' |perl -pi -e 's/like/\\-type/'`
+    perl -lane 'print join("\\t",@F,'\$phenotype')' \$cmh >>table.tab
+  done
+  
+  sort -k18,18 -k8rn,8rn table.tab |cut -f1-12,14-16,18 >table.sorted.tab
+  
+  cat header.tab table.sorted.tab >Alleva_et_al_Associtions.tab
+  
   cp accessoryFiles/scripts/genericFunctions.R .
-
-  R --no-save <${params.accessorydir}/scripts/drawAllevaFigure3.R
-  rm -f Rplots.pdf
+  cp accessoryFiles/scripts/drawAllevaAssociationPlots.R .
+  
+  R --no-save <drawAllevaAssociationPlots.R
+  rm -f Rplots.pdf 
   """
   }
-
-process drawFigure3MMSupp{
+  
+process drawRelatednessFigure{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
-  publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
 
   input:
-  path(rtable)
-  path(alleles)
+  path(relatedness_table)
+  path(allele_dets_A)
+  path(allele_details)
+  path(jeffreys_BS_alleles)
+  path(pop_genotypes)
 
   output:
-  path('Allev*.p??',                  emit: mmFig)
-  path('PrZFA_relatedness.mouse.tab', emit: rtab)
+  path('Alleva_et_al_RelatednessPlot.p*',    emit: mainFig)
+  path('Alleva_et_al_RelatednessPlot_S*.p*', emit: suppFig)
 
   """
   ln -s ${params.accessorydir} accessoryFiles
-
-  grep event PrZFA_relatedness_ALLmouse.tab       |head -n1                                        >PrZFA_relatedness.mouse.tab
-  sort -k1,1 -k2,2 PrZFA_relatedness_ALLmouse.tab |grep -v event |perl -lane 'print \$_ if (\$_)' >>PrZFA_relatedness.mouse.tab
-
-  cp ${alleles} PrZFA_alleles.foundInPops.txt
-
-  perl -lane '\$F[0] =~ /^(\\S+?)_(\\S+)\$/;
-             (\$str,\$id) = (\$1,\$2);
-             if (\$id =~ s/::(\\S+)\$//){\$pub = \$1}else{\$pub = "NA"};
-             print join("\\t",\$str,\$F[0],\$id,\$pub,\$F[1])' PrZFA_allele_codes.mouse.txt >PrZFA_allele_details.mouse.txt
-
-  R --no-save <${params.accessorydir}/scripts/drawAllevaFigure3_MouseNetworkSupp.R
+  
+  ## Make table for Jeffreys data
+  perl ${params.accessorydir}/scripts/makePRDM9variantsDF.pl 
+  
+  R --no-save <${params.accessorydir}/scripts/drawAllevaTemplateSwitchPlots.R
+  
   rm -f Rplots.pdf
   """
   }
+// 
+// process drawFigure3MMSupp{
+//   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
+//   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
+//   publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
+// 
+//   input:
+//   path(rtable)
+//   path(alleles)
+// 
+//   output:
+//   path('Allev*.p??',                  emit: mmFig)
+//   path('PrZFA_relatedness.mouse.tab', emit: rtab)
+// 
+//   """
+//   ln -s ${params.accessorydir} accessoryFiles
+// 
+//   grep event PrZFA_relatedness_ALLmouse.tab       |head -n1                                        >PrZFA_relatedness.mouse.tab
+//   sort -k1,1 -k2,2 PrZFA_relatedness_ALLmouse.tab |grep -v event |perl -lane 'print \$_ if (\$_)' >>PrZFA_relatedness.mouse.tab
+// 
+//   cp ${alleles} PrZFA_alleles.foundInPops.txt
+// 
+//   perl -lane '\$F[0] =~ /^(\\S+?)_(\\S+)\$/;
+//              (\$str,\$id) = (\$1,\$2);
+//              if (\$id =~ s/::(\\S+)\$//){\$pub = \$1}else{\$pub = "NA"};
+//              print join("\\t",\$str,\$F[0],\$id,\$pub,\$F[1])' PrZFA_allele_codes.mouse.txt >PrZFA_allele_details.mouse.txt
+// 
+//   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure3_MouseNetworkSupp.R
+//   rm -f Rplots.pdf
+//   """
+//   }
 
 process drawGelQuantificationFigure{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
@@ -427,22 +638,25 @@ process mergePublishedAndFoundAlleles{
                 }
               }' ${dets} |sort |grep -vP '^(NA|UU|NU)' |grep -vP '^\\s+\$' |uniq >PrZFA_ZFs.foundInPops.txt
 
-  perl -lane 'print join("\\t",\$F[4],\$F[6]);
-              print join("\\t",\$F[5],\$F[7])' ${dets} |sort -V |grep -v Unk |grep -v NA |grep -v allele |uniq >PrZFA_alleles.foundInPops.txt
+  cat ${dets} |sort -V |grep -v allele |perl -lane 'print join("\\t",\$F[4],\$F[6]); print join("\\t",\$F[5],\$F[7])' |
+               grep -vP '^(Unk|NA)' |sort |uniq  >PrZFA_alleles.foundInPops.txt
 
   sort -V ${pubZFs}     PrZFA_ZFs.foundInPops.txt     |uniq >PrZFA_ZFs.txt
   sort -V ${pubAlleles} PrZFA_alleles.foundInPops.txt |uniq >PrZFA_alleles.tmp
 
-  ## Add logical fields for published / pop / new alleles
-  grep -f    ${pubAlleles} PrZFA_alleles.tmp |perl -lane 'chomp; print "\$_\\tTRUE"'  >aPub.txt
-  grep -v -f ${pubAlleles} PrZFA_alleles.tmp |perl -lane 'chomp; print "\$_\\tFALSE"' >aNoPub.txt
-  sort -V aPub.txt aNoPub.txt >PrZFA_alleles.vPub.tmp
+  ## Add logical fields for published alleles
+  cut -f1 ${pubAlleles} >pubAlleles.IDs
+  perl -lane 'BEGIN{open IN, "pubAlleles.IDs"; while (<IN>){chomp; \$ok{\$_}++};close IN}; 
+              chomp; 
+              print join("\\t",@F,\$ok{\$F[0]}?"TRUE":"FALSE")' PrZFA_alleles.tmp >PrZFA_alleles.vPub.tmp
 
-  grep -f    PrZFA_alleles.foundInPops.txt PrZFA_alleles.vPub.tmp |perl -lane 'chomp; print "\$_\\tTRUE\\t"'  >aPop.txt
-  grep -v -f PrZFA_alleles.foundInPops.txt PrZFA_alleles.vPub.tmp |perl -lane 'chomp; print "\$_\\tFALSE\\t"' >aNoPop.txt
-  sort -V aPop.txt aNoPop.txt >PrZFA_alleles.txt
+  ## Add logical fields for pop alleles
+  cut -f1 PrZFA_alleles.foundInPops.txt >PrZFA_alleles.foundInPops.IDs
+  perl -lane 'BEGIN{open IN, "PrZFA_alleles.foundInPops.IDs"; while (<IN>){chomp; \$ok{\$_}++};close IN}; 
+              chomp; 
+              print join("\\t",@F,\$ok{\$F[0]}?"TRUE":"FALSE")' PrZFA_alleles.vPub.tmp >PrZFA_alleles.txt
 
-  cut -f1 PrZFA_alleles.txt |uniq >distinct_PrZFA_allele_names.txt
+  cut -f1 PrZFA_alleles.txt |uniq >distinct_PrZFA_allele_names.txt  
 
   """
   }
@@ -451,15 +665,20 @@ process inferRelatednessOfAlleles{
   input:
   path(alleles_to_check)
   path(PrZFA_alleles)
-  path(PrZFA_ZFs)
+  //path(justForADelay)
 
   output:
   path('PrZFA_relatedness*tab', emit: pub)
 
+  script:
+  def randID = new Random().with {(1..30).collect {(('a'..'z')).join()[ nextInt((('a'..'z')).join().length())]}.join()}
   """
   ln -s ${params.accessorydir} accessoryFiles
 
-  perl ${params.accessorydir}/scripts/checkPrdm9Recombinants.pl --a ${PrZFA_alleles} --z ${PrZFA_ZFs} --c ${alleles_to_check} --o PrZFA_relatedness.\$RANDOM\$RANDOM.tab
+  cp ${params.accessorydir}/scripts/checkForRecombinants.pl .
+  cp ${params.accessorydir}/scripts/checkPrdm9BiParentalRecombinants.pl .
+  
+  perl checkForRecombinants.pl --allele ${alleles_to_check} >PrZFA_relatedness_graph.${randID}.tab
   """
   }
 
@@ -477,6 +696,382 @@ process inferRelatednessOfMouseAlleles{
 
   perl ${params.accessorydir}/scripts/checkPrdm9Recombinants.pl --a ${PrZFA_alleles} --z ${PrZFA_ZFs} --c ${alleles_to_check} --o PrZFA_relatedness.\$RANDOM\$RANDOM.tab
   """
+  }
+
+process getLinkedAlleles{
+  publishDir "${params.outdir}/linkage", mode: 'copy', overwrite: true
+
+  input:
+  path(pr_haps)
+  path(ACtypes)
+  
+  output:
+  path('PRDM9*.bed'        , emit: prdm9)
+  path('*.mod.*cmh'        , emit: cmh)
+  path('*eno*txt'          , emit: type)
+  path('*ust*txt'          , emit: clust)
+  path('*eepers.sel*map'   , emit: map)
+  path('*.SNPsequences.tab', emit: snpseq)
+
+  script:
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+  
+  ## Get position of PRDM9 gene & exons
+  #wget http://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_38/gencode.v38.basic.annotation.gff3.gz
+  #zcat gencode.v38.basic.annotation.gff3.gz |grep PRDM9 |grep -P '\\stranscript\\s' |cut -f1,4,5 |mergeBed -i -      >PRDM9.transcript.bed
+  #zcat gencode.v38.basic.annotation.gff3.gz |grep PRDM9 |grep -P '\\sexon\\s'       |cut -f1,4,5 |sort -k1,1 -k2n,2n >PRDM9.exons.bed
+
+  cp accessoryFiles/PRDM9locus/*bed .
+  
+  ## Hard code hg38 PRDM9 ZF locus coordinates
+  zfstart=23526671
+  zfend=23527765
+
+  echo -e "chr5\\t\$zfstart\\t\$zfend" >PRDM9.ZFDomains.bed
+  f=\$((zfstart - 20000000))
+  t=\$((zfstart + 20000000))
+  ## Change to whole chromosome
+  #f=1
+  #t=181538259
+  
+  ## Download 1KG SNPs ... tabix slicing not working for some reason. 
+  wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr5.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
+  wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr5.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz.tbi
+  #gsutil cp gs://genomics-public-data/1000-genomes/vcf/ALL.chr5.integrated_phase1_v3.20101123.snps_indels_svs.genotypes.vcf .
+  #gsutil cp gs://genomics-public-data/1000-genomes/vcf/ALL.chr5.integrated_phase1_v3.20101123.snps_indels_svs.genotypes.vcf.tbi .
+  
+  ## Re-label as VCFv4.2 : vcftools not compatible with v4.3 !!
+  #  NOTE: this just tricks vcftools - format doesn't change, but for this purpose, that's OK!
+  tabix -h ALL.chr5.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz 5:\$f-\$t |perl -pi -e 's/VCFv4.3/VCFv4.2/' >reg.vcf
+  
+  ## Get all individuals with a called diploid PRDM9 genotype
+  ## exclude individuals with an unknown allele
+  ## exclude YRI "children" - both parents also in cohort 
+  grep -v ^id ${pr_haps} |grep -vP '(Unk|NoZFA)' |grep -v TRUE\$ >pr_haps_to_use.txt
+  cat pr_haps_to_use.txt |cut -f1 |sort |uniq >individuals.txt
+  
+  ## Keep genotypes only for select individuals (with diploid Prdm9 genotype)
+  vcftools --keep individuals.txt --gzvcf reg.vcf \
+          --from-bp \$f --chr 5 --to-bp \$t \
+          --mac 1 --max-mac 10000 \
+          --recode --remove-indels \
+          --maf 0.02 \
+          --max-missing 1 \
+          --out prdm9AS_keepers
+
+  ## Get final list of people to use and count
+  head -n 2000 prdm9AS_keepers.recode.vcf |grep ^# |tail -n1 |\
+                        perl -pi -e 's/^.+INFO\\s+FORMAT\\s+//' 2>e.e |\
+                        perl -lane 'print join("\\n",@F)' >individuals_for_plink.txt
+                        
+  ## Add rs IDS to 1KG vcf file
+  #tabix -h https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.38.gz NC_000005.10:\$f-\$t |\
+  #      perl -pi -e 's/NC_000005.10/5/g' >regionRS.vcf
+  
+  tabix -h https://ftp.ncbi.nih.gov/snp/archive/b154/VCF/GCF_000001405.38.gz  NC_000005.10:\$f-\$t |\
+        perl -pi -e 's/NC_000005.10/5/g' >regionRS.vcf
+  
+  ncols=`head -n 2000 prdm9AS_keepers.recode.vcf |grep ^# |tail -n1 |perl -lane 'print \$#F+1'`
+
+  intersectBed -a prdm9AS_keepers.recode.vcf \
+               -b regionRS.vcf -wao |\
+               perl -lane 'if (\$_ =~ /^.+\\s(rs\\d+)/){\$F[2] = \$1}; \$out=join("\\t",@F); print \$out' |\
+               cut -f1-\$ncols |\
+               sort -k1,1 -k2n,2n |\
+               uniq >prdm9AS_keepers.tmpvcf
+
+  grep ^# prdm9AS_keepers.recode.vcf >head.vcf
+  cat head.vcf prdm9AS_keepers.tmpvcf >prdm9AS_keepers.vcf
+  
+  bgzip prdm9AS_keepers.vcf
+  tabix -p vcf prdm9AS_keepers.vcf.gz 
+
+  ## Make plink files for "final" VCF
+  vcftools --gzvcf prdm9AS_keepers.vcf.gz \
+           --plink --out prdm9AS_keepers
+
+  ## Get phenotype-individual table
+  ## Add A-type/C-type to table
+  grep -v ^# PrZFA_alleles.details.txt |sort >ACsorted.txt
+  
+  grep -f individuals_for_plink.txt ${pr_haps} >haps_plink.1.tmp
+  
+  sort -k6,6 haps_plink.1.tmp >haps_plink.2.tmp
+
+  join -1 6 -2 1 haps_plink.2.tmp ACsorted.txt |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |cut -f1-7,25 |sort -k6,6 >haps_plink.3.tmp
+  join -1 6 -2 1 haps_plink.3.tmp ACsorted.txt |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |cut -f1-8,18             >prdm9_haplotypes.tmp
+
+  perl -lane 'print join("\\t",@F[2..5],@F[0..1],\$F[7]."like",\$F[8]."like")' prdm9_haplotypes.tmp >prdm9_haps_for_plink.tab
+
+  ## Build phenotypes, clusters (populations) and genotypes files for plink
+  cat prdm9_haps_for_plink.tab |\
+      perl -lane 'BEGIN{print join("\\t","FID","IID","A","B","C","L14","Alike","Clike")}; \
+                        \$A = (\$F[4] eq "A" || \$F[5] eq "A")?2:1; 
+                        \$B = (\$F[4] eq "B" || \$F[5] eq "B")?2:1; 
+                        \$C = (\$F[4] eq "C" || \$F[5] eq "C")?2:1; 
+                        \$L14 = (\$F[4] eq "L14" || \$F[5] eq "L14")?2:1; 
+                        \$Alike = (\$F[6] eq "Alike" || \$F[7] eq "Alike")?2:1; 
+                        \$Clike = (\$F[6] eq "Clike" || \$F[7] eq "Clike")?2:1; 
+                        print join("\\t",\$F[0],\$F[0],\$AA,\$A,\$B,\$C,\$L14,\$Alike,\$Clike)' >phenotypes.txt
+                        
+  grep -v ^id prdm9_haps_for_plink.tab |awk '{print \$1 "\\t" \$1 "\\t" \$2}' >clusters.txt
+  grep -v ^id prdm9_haps_for_plink.tab |awk '{print \$1 "\\t" \$1 "\\t" \$3}' >genotypes.txt
+
+  ## Run association tests
+  plink --file prdm9AS_keepers --assoc --pheno phenotypes.txt --all-pheno --allow-no-sex --within clusters.txt --mh
+
+  ## Generate output files for individual phenotypes
+  for phen in "A" "B" "C" "L14" "Alike" "Clike"; do
+    
+    ## Label SNPs that coincide with PRDM9 transcript, ZFDomains, Exons
+    perl -lane 'print join("\\t","chr5",\$F[2]-1,\$F[2],\$F[1]) unless (\$_ =~ /CHR/)' plink.\$phen.cmh |\
+                intersectBed -a - -b PRDM9.transcript.bed -c |\
+                intersectBed -a - -b PRDM9.ZFDomains.bed  -c |\
+                intersectBed -a - -b PRDM9.exons.bed  -c |\
+                perl -lane 'BEGIN{print join("\\t","rsagain","transcript","zfdomain","exon")}; 
+                                  print join("\\t",@F[3..6])' >ol.tab
+
+    paste plink.\$phen.cmh ol.tab >plinkMOD.\$phen.cmh
+
+    grep -v CHR plinkMOD.\$phen.cmh |\
+                perl -lane 'if (\$F[7] !~ /^[0123456789\\.e\\-]+\$/ || \$F[7] eq "0" || \$F[14] > 0){
+                              \$F[7] = -1;
+                            }else{
+                              \$F[7]=-1*log(\$F[7])/log(10);
+                            }
+                            print join("\\t",@F)' |\
+                sort -k8rn,8rn >associated_SNPs.\$phen.tab
+
+    head -n 10       associated_SNPs.\$phen.tab  >selectSNPs.\$phen.tmp
+    grep rs6889665   associated_SNPs.\$phen.tab >>selectSNPs.\$phen.tmp
+    grep rs1603084   associated_SNPs.\$phen.tab >>selectSNPs.\$phen.tmp
+    grep rs10057021  associated_SNPs.\$phen.tab >>selectSNPs.\$phen.tmp
+    grep rs141586808 associated_SNPs.\$phen.tab >>selectSNPs.\$phen.tmp
+    grep rs139754603 associated_SNPs.\$phen.tab >>selectSNPs.\$phen.tmp
+
+    sort -k1,1 selectSNPs.\$phen.tmp |uniq >selectSNPs.\$phen.tab
+    
+    cat selectSNPs.\$phen.tab |\
+                perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |\
+                cut -f2 >selectSNPs.\$phen.list
+
+    grep -vf selectSNPs.\$phen.list plinkMOD.\$phen.cmh |perl -lane 'chomp; print \$_."\\t".(\$line++?"0":"selected")' >others.txt
+    grep -f  selectSNPs.\$phen.list plinkMOD.\$phen.cmh |perl -lane 'chomp; print \$_."\\t1"'                          >select.txt
+    sort -k3n,3n others.txt select.txt |perl -pi -e 's/^\\s+//' |perl -pi -e 's/\\s+(\\S+)/\\t\$1/g'         >prdm9AS.\$phen.mod.cmh
+
+    rm others.txt select.txt
+    
+    ## Make genotypes file for select SNPs
+    perl -lane 'print join("\\t",\$F[0],\$F[2]-1,\$F[2])' selectSNPs.\$phen.tab >selectSNPs.\$phen.bed
+    tabix -h prdm9AS_keepers.vcf.gz -R selectSNPs.\$phen.bed >selectSNPs.\$phen.vcf
+
+    vcftools --vcf selectSNPs.\$phen.vcf \
+             --plink \
+             --out prdm9AS_keepers.select\$phen
+    
+    ## Change order in ped file
+    headerTxt="FID"
+    for x in `grep -vP '^#' selectSNPs.\$phen.vcf |cut -f3`; do 
+      headerTxt=\$headerTxt"\\t"\$x"_A\\t"\$x"_B"
+    done
+    
+    echo -e \$headerTxt >prdm9AS_keepers.select\$phen.SNPsequences.tab
+    cut -f1,7-1000 prdm9AS_keepers.select\$phen.ped >>prdm9AS_keepers.select\$phen.SNPsequences.tab
+    
+    
+  done
+
+
+  """
+  }
+  
+process dnaToPeptide{
+  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
+  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
+  publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
+
+  input:
+  path(PrZFA_alleles)
+  path(PrZFA_ZFs)
+  path(allBloodAndSperm_alleles)
+  
+  output:
+  path('PrZFA_alleles.details.txt', emit: alleles)
+  path('PrZFA_ZFs.details.txt'    , emit: zfs)
+  path('*.p??'                    , emit: img)
+
+  script:
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+
+  ## get allele NT sequences
+  perl -lane 'BEGIN{open IN, "${PrZFA_ZFs}";
+              while (<IN>){
+                  my @X = split(/\\t/,\$_);
+                  chomp \$X[3];
+                  \$aa{\$X[0]} = \$X[3];
+                };
+                close IN;
+              };
+              my \$seq;
+              chomp \$F[3];
+              \$F[0] =~ s/^\\s*\\>(\\S+)/\$1/;
+              while (\$F[1] =~ s/^(\\S\\S)//){\$seq .= \$aa{\$1}};
+              print \$F[0]."\\t".\$seq' ${PrZFA_alleles} |sort >PrZFA_alleles.NT.txt
+
+  awk '{print ">"\$1"\\n"\$2}' PrZFA_alleles.NT.txt |fold -w 28 >PrZFA_alleles.NT.fa
+
+  ## ZFs to AA sequences
+  perl -lane 'open RAW, ">", "x.raw";
+              print RAW \$F[3];
+              close RAW;
+              \$aa=`transeq -sequence x.raw -outseq /dev/stdout 2>/dev/null |grep -vP "^\\>"`;
+              chomp \$aa;
+              print \$F[0]."\\t".\$aa' ${PrZFA_ZFs} |sort >PrZFA_ZFs.AA.txt
+
+  awk '{print ">"\$1"\\n"\$2}' PrZFA_ZFs.AA.txt |fold -w 28 >PrZFA_ZFs.AA.fa
+
+  ## Alleles to ZF sequences
+  perl -lane 'BEGIN{open IN, "PrZFA_ZFs.AA.txt";
+              while (<IN>){
+                  my @X = split(/\\t/,\$_);
+                  chomp \$X[1];
+                  \$aa{\$X[0]} = \$X[1];
+                };
+                close IN;
+              };
+              my \$AAseq;
+              chomp \$F[3];
+              \$F[0] =~ s/^\\s*\\>(\\S+)/\$1/;
+              while (\$F[1] =~ s/^(\\S\\S)//){\$AAseq .= \$aa{\$1}};
+              print \$F[0]."\\t".\$AAseq' ${PrZFA_alleles} |sort >PrZFA_alleles.AA.txt
+
+  awk '{print ">"\$1"\\n"\$2}' PrZFA_alleles.AA.txt |fold -w 28 >PrZFA_alleles.AA.fa
+
+  ## ZFs to contact residues
+  perl -lane 'open RAW, ">", "x.raw";
+              print RAW \$F[3];
+              close RAW;
+              \$aa=`transeq -sequence x.raw -outseq /dev/stdout 2>/dev/null |grep -vP "^\\>"`;
+              chomp \$aa;
+              @AA = split(//,\$aa);
+              print \$F[0]."\\t".join("",\$AA[6],\$AA[7],\$AA[9],\$AA[12])' ${PrZFA_ZFs} |sort >PrZFA_ZFs.AAcontactresidues.txt
+
+  awk '{print ">"\$1"\\n"\$2}' PrZFA_ZFs.AAcontactresidues.txt |fold -w 28 >PrZFA_ZFs.AAcontactresidues.fa
+
+  ## Alleles to contact residues
+  perl -lane 'BEGIN{open IN, "PrZFA_ZFs.AAcontactresidues.txt";
+              while (<IN>){
+                  my @X = split(/\\t/,\$_);
+                  chomp \$X[1];
+                  \$aa{\$X[0]} = \$X[1];
+                };
+                close IN;
+              };
+              my \$AAseq;
+              chomp \$F[3];
+              \$F[0] =~ s/^\\s*\\>(\\S+)/\$1/;
+              while (\$F[1] =~ s/^(\\S\\S)//){\$AAseq .= \$aa{\$1}};
+              print \$F[0]."\\t".\$AAseq' ${PrZFA_alleles} |sort >PrZFA_alleles.AAcontactresidues.txt
+
+  awk '{print ">"\$1"\\n"\$2}' PrZFA_alleles.AAcontactresidues.txt |fold -w 28 >PrZFA_alleles.AAcontactresidues.fa
+
+  #############################################################################
+  ## Now collect these into one big TSV for alleles
+  ## Do ZF info first
+  echo -e "#code           The two-character ZF code used in this publication"     >PrZFA_ZFs.details.txt
+  echo -e "#old_code       The one-character ZF code used in past publication(s)" >>PrZFA_ZFs.details.txt
+  echo -e "#source         The original source that described this ZF"            >>PrZFA_ZFs.details.txt
+  echo -e "#dna_sequence   The DNA sequence of this ZF"                           >>PrZFA_ZFs.details.txt
+  echo -e "#aa_sequence    The amino acid sequence of this ZF"                    >>PrZFA_ZFs.details.txt
+  echo -e "dna_contact_aas The amino acids that contact DNA (-1,2,3,6 positions; see https://doi.org/10.1074/jbc.M117.805754)" >>PrZFA_ZFs.details.txt
+
+  echo -e "code\told_code\tsource\tdna_sequence\taa_sequence\tdna_contact_aas"     >>PrZFA_ZFs.details.txt
+
+  sort -k1,1 PrZFA_ZFs.txt >sortedZFs.txt
+  join sortedZFs.txt PrZFA_ZFs.AA.txt                |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >zf1.txt
+  join zf1.txt       PrZFA_ZFs.AAcontactresidues.txt |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >>PrZFA_ZFs.details.txt
+
+  #############################################################################
+  ## Check A-type / C-type alleles
+  #############################################################################
+
+  grep -P '^A\\s' PrZFA_alleles.AAcontactresidues.txt |perl -lane '\$_ =~ /^.+(.{24})\$/; print ">A-BD\\n\$1"' >A-BD.fa
+  grep -P '^C\\s' PrZFA_alleles.AAcontactresidues.txt |perl -lane '\$_ =~ /^.+(.{28})\$/; print ">C-BD\\n\$1"' >C-BD.fa
+
+  makeblastdb -dbtype prot -in PrZFA_alleles.AAcontactresidues.fa -out PRZFA
+
+  blastp -query A-BD.fa -db PRZFA -outfmt 7 -gapopen 32767 -gapextend 32767 -max_hsps 1 -num_alignments 10000 >A-BD_hits.blastp.txt
+  blastp -query C-BD.fa -db PRZFA -outfmt 7 -gapopen 32767 -gapextend 32767 -max_hsps 1 -num_alignments 10000 >C-BD_hits.blastp.txt
+
+  cat A-BD_hits.blastp.txt |grep -v ^# |perl -lane 'print \$F[1]."\\t".(((24-\$F[3]))+\$F[4])' |sort -k1,1 >ABDhits.txt
+  cat C-BD_hits.blastp.txt |grep -v ^# |perl -lane 'print \$F[1]."\\t".(((28-\$F[3]))+\$F[4])' |sort -k1,1 >CBDhits.txt
+
+  echo -e "allele\\tdA\\tdC"                  >AC_BDhits.txt
+  paste ABDhits.txt CBDhits.txt |cut -f1,2,4 >>AC_BDhits.txt
+
+  paste ABDhits.txt CBDhits.txt |cut -f1,2,4 |perl -lane 'BEGIN{print "allele\ttype"};
+                                              print join("\\t",\$F[0], \$F[1], \$F[2], (\$F[1]<\$F[2]?"A":"C"))' |sort >PrZFA_alleles.ACtype.txt
+
+  echo -e "#ID               PRDM9 allele long ID"                                     >PrZFA_alleles.details.txt
+  echo -e "#short_ID         PRDM9 allele short ID (for alleles from Jeffreys 2013)"  >>PrZFA_alleles.details.txt
+  echo -e "#published_allele TRUE if allele is from a previously published work"      >>PrZFA_alleles.details.txt
+  echo -e "#in_pop           TRUE if allele is found in human populations"            >>PrZFA_alleles.details.txt
+  echo -e "#                 FALSE if only found in sperm / blood from Jeffreys 2013" >>PrZFA_alleles.details.txt
+  echo -e "#dna_sequence     The DNA sequence of the ZF array for this allele"        >>PrZFA_alleles.details.txt
+  echo -e "#aa_sequence      The amino acid sequence of the ZF array for this allele" >>PrZFA_alleles.details.txt
+  echo -e "#dna_contact_aas  The amino acids that contact DNA (-1,2,3,6 positions; see https://doi.org/10.1074/jbc.M117.805754)"   >>PrZFA_alleles.details.txt
+  echo -e "#ABDdist          BLAST distance to PRDM9A binding site"                   >>PrZFA_alleles.details.txt
+  echo -e "#CBDdist          BLAST distance to PRDM9C binding site"                   >>PrZFA_alleles.details.txt
+  echo -e "#ACtype           Is this allele more A-type or C-type"                    >>PrZFA_alleles.details.txt
+
+  echo -e "ID\\tshort_ID\\tzf_code\\tpublished_allele\\tin_pop\\tdna_sequence\\taa_sequence\\tdna_contact_aas\\tABDdist\\tCBDdist\\tACtype" >>PrZFA_alleles.details.txt
+
+  ## Sort & add shortID column
+  sort -k1,1 PrZFA_alleles.txt | perl -lane '\$sID = \$F[0];
+                                             \$sID =~ s/^(\\S+v):\\S+?:(\\d+):.+\$/\$1:\$2/;
+                                             \$F[0] = \$F[0]."\\t".\$sID;
+                                             print join("\\t",@F)' >sortedalleles.txt
+
+  join sortedalleles.txt PrZFA_alleles.NT.txt                |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >s1.txt
+  join s1.txt            PrZFA_alleles.AA.txt                |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >s2.txt
+  join s2.txt            PrZFA_alleles.AAcontactresidues.txt |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >s3.txt
+  join s3.txt            PrZFA_alleles.ACtype.txt            |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >>PrZFA_alleles.details.txt
+
+  
+  R --no-save <${params.accessorydir}/scripts/drawACtypePlot.R
+  """
+  }
+
+process makeACtypesPlot{
+  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
+  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
+
+  input:
+  path(allele_dets)
+  path(zf_dets)
+  path(allBloodAndSperm_alleles)
+  
+  output:
+  path('*.p??', emit: img)
+
+  script:
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+
+  #perl -lane 'print ">\$F[1]\\n\$F[6]" if (\$F[4] eq "TRUE")' ${allele_dets} |fold -w 28 >pubAlleles.AA.fa
+  #pwm_predict -m SVMp pubAlleles.AA.fa
+  
+  cp ${allele_dets} atype_ctype.txt
+  
+  cp accessoryFiles/otherdata/pubAlleles.AA.pwm .
+  cp accessoryFiles/otherdata/PrZFA_Alleles.AA.pwm .
+  
+  cp accessoryFiles/img/motifAlignmentManual.png .
+  
+  R --no-save <accessoryFiles/scripts/drawACtypePlot.R
+  """  
   }
 
 process processHumanHotspots {
@@ -751,7 +1346,37 @@ process getMotifsChipmunk {
   """
   }
 
-process drawFigure4 {
+process drawMotifBSClustering {
+
+  publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*png'
+  publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*pdf'
+  publishDir "${params.outdir}/humanHS/motifPWM", mode: 'copy', overwrite: true, pattern: '*pwm'
+
+  input:
+  path(meme)
+  path(hs)
+
+  output:
+  path("*png", emit: png)
+  path("*pdf", emit: pdf)
+  path("*pwm", emit: prdm9PredictedBS)
+
+  script:
+  """
+  ln -s ${params.accessorydir} accessoryFiles
+
+  ln -s \$pwdpred_dir/hmmsearch .
+  ln -s \$pwdpred_dir/zf_C2H2.ls.hmm .
+  ln -s \$pwdpred_dir/SVMp4.mod .
+  
+  \$pwdpred_dir/pwm_predict -m SVMp pubAlleles.AA.fa
+
+  R --no-save <accessoryFiles/scripts/drawPRDM9BSpredictionsPlot.R
+  rm -f Rplots.pdf
+  """
+  }
+
+process drawHotspotsFigure {
 
   publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*png'
   publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*pdf'
@@ -781,10 +1406,28 @@ process drawFigure4 {
   #./pwm_predict -m SVMp selectPRDM9.AA.fa
 
   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure4.R
+  R --no-save <${params.accessorydir}/scripts/drawAllevaHotspotsFigure_Supp.R
   rm -f Rplots.pdf
   """
   }
-
+// 
+// process generateNumbersForFinalPaper{
+// 
+//   publishDir "${params.outdir}/papernumbers",          mode: 'copy', overwrite: true, pattern: '*txt'
+// 
+//   input:
+//   path(hs)
+// 
+//   output:
+//   path("*txt", emit: txt)
+// 
+//   script:
+//   """
+//   ln -s ${params.accessorydir} accessoryFiles
+// 
+// 
+//   """
+//   }
 //#############################################
 workflow faToGenotype{
   take:
@@ -851,19 +1494,20 @@ workflow genotypeFromPacbio {
   genotypes
   }
 
-workflow genotypeFromGuppy {
+workflow genotypeFromBonito1D {
   take:
   pubZFs
   pubAlleles
 
   main:
-  guppy_fa  = Channel.fromPath("${params.guppyfa}/1D2/*.fa")
-  raw_fasta = merge_raw_fa(guppy_fa.collect())
+  //raw_fasta = Channel.fromPath("${params.pbfa}/*.fa")
+  in_fa = Channel.fromPath("${params.bonito1dfa}/*.fa")
+  raw_fasta = merge_raw_fa(in_fa.collect(),'bonito1d')
 
   // This is required to convert the ArrayList output to a Channel !
   raw_fa     = raw_fasta.fa.flatten().map { sample -> file(sample) }
 
-  genotypes = faToGenotype("guppy", raw_fas,  pubZFs, pubAlleles)
+  genotypes = faToGenotype("bonito1d", raw_fa,  pubZFs, pubAlleles)
 
   emit:
   genotypes
@@ -875,7 +1519,7 @@ workflow genotypeFromMerge {
   pubAlleles
 
   main:
-  ontFA    = Channel.fromPath("${params.ontfa}/*.fa")
+  ontFA    = Channel.fromPath("${params.bonito1dfa}/*.fa")
   pbFA     = Channel.fromPath("${params.pbfa}/*.fa")
 
   raw_fasta  = merge_raw_fa(ontFA.join(pbFA, remainder: true).collect(),'pb_ont')
@@ -893,27 +1537,60 @@ workflow genotypeFromMerge {
 workflow {
 
   aData    = get_known_human_prdm9_data()
-
+  bsAlleles = get_jeffreys_blood_and_sperm_variants_only()
+  
+//gt_guppy  = genotypeFromGuppy(aData.hsZFs,aData.hsAlleles)
   gt_bonito = genotypeFromBonito(aData.hsZFs,aData.hsAlleles)
   gt_pacbio = genotypeFromPacbio(aData.hsZFs,aData.hsAlleles)
-  //gt_guppy  = genotypeFromGuppy(aData.hsZFs,aData.hsAlleles)
+  gt_bonito1d  = genotypeFromBonito1D(aData.hsZFs,aData.hsAlleles)
   gt_final  = genotypeFromMerge(aData.hsZFs,aData.hsAlleles)
-
+  
   prZFAData = mergePublishedAndFoundAlleles(gt_final,aData.hsZFs,aData.hsAlleles)
-  mmZFAData = getMousePrZFAs()
+  //mmZFAData = getMousePrZFAs()
 
   figGels   = drawGelQuantificationFigure(gt_final)
 
-  fig1Data  = drawFigure1(gt_bonito, gt_pacbio)
-  fig2Data  = drawFigure2(gt_final)
+  caveatFig = analyzeDiscordancesPB_v_ONT(gt_bonito1d, gt_pacbio)
+
+  // Infer alleles that bind common seqs
+  //prZFAA    = assessZFsThatBindSimilarSequences(prZFAData.allele,prZFAData.zf)
+  prZFAA    = dnaToPeptide(prZFAData.allele, prZFAData.zf, bsAlleles.alleles)
+  ac        = makeACtypesPlot(prZFAA.alleles, prZFAA.zfs, bsAlleles.alleles)
+
+  trioGTs       = checkTrios(gt_final)
+  newGTs        = parseNewGTsONLY(gt_final)
+  gt_validation = checkNewAllelesWithShortReads(newGTs.tab.splitText( by: 5, file: true ),
+                                                prZFAA.zfs)
+  figValid      = drawShortReadValidationFig(gt_validation.tab.collect())
+  
+  //fig1Data  = drawFigure1_1D2(gt_bonito, gt_pacbio)
+  fig1Data  = drawFigure1(gt_bonito1d, gt_pacbio)
+  fig2Data  = drawFigure2(gt_final, prZFAA.alleles)
 
   // Human PrZFA network
-  prZFARel  = inferRelatednessOfAlleles(prZFAData.names.splitText( by: 4, file: true ),prZFAData.allele,prZFAData.zf)
-  fig3Data  = drawFigure3(prZFARel.pub.collectFile(name: 'PrZFA_relatedness_ALLhuman.tab', newLine: true), prZFAData.allele)
+  prZFARel  = inferRelatednessOfAlleles(prZFAData.names.splitText( by: 8, file: true ),prZFAA.alleles)
+  
+  // merge relatedness files
+  allRelatednessData = prZFARel.pub.collectFile(name: 'PrZFA_relatedness_ALLhuman.tab', newLine: true)
+  
+  fig3Data  = drawRelatednessFigure(prZFARel.pub.collect(), 
+                                    prZFAData.allele,
+                                    prZFAA.alleles,
+                                    bsAlleles.alleles,
+                                    gt_final)
 
+  // Analysis of linked haplotypes
+  aLink     = getLinkedAlleles(gt_final,prZFAA.alleles)
+  figAssoc  = drawAssociationsFigure(aLink.prdm9.collect(),
+                                    aLink.cmh.collect(),
+                                    aLink.type.collect(),
+                                    aLink.clust.collect(),
+                                    aLink.map.collect(),
+                                    aLink.snpseq.collect())
+                                    
   // Mouse PrZFA network
-  mmZFARel  = inferRelatednessOfMouseAlleles(mmZFAData.names.splitText( by: 4, file: true ),mmZFAData.allele,mmZFAData.zf)
-  fig3MMSu  = drawFigure3MMSupp(mmZFARel.pub.collectFile(name: 'PrZFA_relatedness_ALLmouse.tab', newLine: true), mmZFAData.allele)
+  //mmZFARel  = inferRelatednessOfMouseAlleles(mmZFAData.names.splitText( by: 4, file: true ),mmZFAData.allele,mmZFAData.zf)
+  //fig3MMSu  = drawFigure3MMSupp(mmZFARel.pub.collectFile(name: 'PrZFA_relatedness_ALLmouse.tab', newLine: true), mmZFAData.allele)
 
   // Figure 4 : SSDS & Motifs
   hotspots   = Channel.fromPath("${params.hs}/*.bedgraph")
@@ -924,7 +1601,7 @@ workflow {
 
   memeMotifs = getMotifsMEME(hsData.memeFA.flatten(), hsData.wideFA.collect())
 
-  fig4Data   = drawFigure4(memeMotifs.meme.collect(), hsData.table)
+  fig5Data   = drawHotspotsFigure(memeMotifs.meme.collect(), hsData.table)
   //cmMotifs   = getMotifsChipmunk(hsData.chipmunkFA.flatten(), hsData.wideFA.collect())
 }
 

@@ -618,9 +618,23 @@ lstSupp       <- drawGenotypingSuccessFigs()
 lstDiploidGTs <- drawDiploidGenotypes()
 lstAlleleFreq <- drawAlleleFrequencies()
 
-## Supp fig first ##############################################################
+## Supp figs first ##############################################################
 ggsave(paste0('Alleva_et_al_SuppFig_Genotyping_By_Pop_VS_Reads.png'),lstSupp$gSupp,width=7,height=3)
 ggsave(paste0('Alleva_et_al_SuppFig_Genotyping_By_Pop_VS_Reads.pdf'),lstSupp$gSupp,width=7,height=3)
+
+gAllelesSupp  <- ggarrange(lstAlleleFreq$gFreqPC,lstAlleleFreq$gFreqCnt,ncol=1,nrow=2,labels=c('A','B'),font.label = list(size=8,face='bold'))
+gCarriersSupp <- ggarrange(lstAlleleFreq$gOneCopyPC,lstAlleleFreq$gOneCopyN,ncol=1,nrow=2,labels=c('A','B'),font.label = list(size=8,face='bold'))
+gDiploidSupp  <- ggarrange(lstDiploidGTs$gFigN,ncol=1,nrow=1,labels=c('',''),font.label = list(size=8,face='bold'))
+
+ggsave(paste0('Alleva_et_al_SuppFig_AlleleFrequencies.png'),gAllelesSupp,width=7,height=8,dpi=400)
+ggsave(paste0('Alleva_et_al_SuppFig_AlleleFrequencies.pdf'),gAllelesSupp,width=7,height=8)
+
+ggsave(paste0('Alleva_et_al_SuppFig_CarrierFrequencies.png'),gCarriersSupp,width=7,height=8,dpi=400)
+ggsave(paste0('Alleva_et_al_SuppFig_CarrierFrequencies.pdf'),gCarriersSupp,width=7,height=8)
+
+ggsave(paste0('Alleva_et_al_SuppFig_DiploidGenotypeFreqs.png'),gDiploidSupp,width=7,height=5,dpi=400)
+ggsave(paste0('Alleva_et_al_SuppFig_DiploidGenotypeFreqs.pdf'),gDiploidSupp,width=7,height=5)
+
 
 ## Now main Fig ################################################################
 gTop <- ggarrange(lstAlleleFreq$gBars, lstDiploidGTs$gHomHet,
@@ -655,12 +669,3 @@ gABCD <- ggarrange(gABC, lstDiploidGTs$gFig,
 
 ggsave('Alleva_et_al_Figure2.png',plot = gABCD, height=7,width=6.5,dpi=500)
 ggsave('Alleva_et_al_Figure2.pdf',plot = gABCD, height=7,width=7)
-
-ggsave('Alleva_et_al_SuppFig_PopPies.png',lstAlleleFreq$gPies,height=5,width=5,dpi=500)
-ggsave('Alleva_et_al_SuppFig_PopPies.pdf',lstAlleleFreq$gPies,height=5,width=5)
-
-ggsave('Alleva_et_al_SuppFig_PrZFA_alleleFreq_N_and_PC.png',lstAlleleFreq$gFreqBoth,height=10,width=7,dpi=500)
-ggsave('Alleva_et_al_SuppFig_PrZFA_alleleFreq_N_and_PC.pdf',lstAlleleFreq$gFreqBoth,height=10,width=7)
-  
-ggsave('Alleva_et_al_SuppFig_PrZFA_alleleCarriers_PC.png',lstAlleleFreq$gOneCopyPC,height=10,width=7,dpi=500)
-ggsave('Alleva_et_al_SuppFig_PrZFA_alleleCarriers_PC.pdf',lstAlleleFreq$gOneCopyPC,height=10,width=7)

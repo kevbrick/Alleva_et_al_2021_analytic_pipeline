@@ -1,0 +1,22 @@
+FROM ncbi/blast:2.10.1
+
+LABEL authors="Kevin Brick" \
+      description="Docker image containing all software requirements for calling PRDM9 haplotypes from long read data"
+
+## Install gcc
+RUN apt-get update
+RUN apt-get -y --force-yes install libblas-dev bioperl 
+RUN apt-get -y --force-yes install r-base
+
+COPY environment.yml /
+RUN conda env create --quiet -f environment.yml && conda clean -a
+
+# Add conda installation dir to PATH (instead of doing 'conda activate')
+ENV PATH /opt/conda/envs/parsePRDM9RE/bin:$PATH
+
+# Dump the details of the installed packages to a file for posterity
+RUN conda env export --name parsePRDM9RE > parsePRDM9RE.yml
+
+# Instruct R processes to use these empty files instead of clashing with a local version
+RUN touch .Rprofile
+RUN touch .Renviron

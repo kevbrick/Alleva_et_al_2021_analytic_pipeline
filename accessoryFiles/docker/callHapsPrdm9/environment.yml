@@ -1,0 +1,17 @@
+# You can use this file to create a conda environment for this pipeline:
+#   conda env create -f environment.yml
+name: parsePRDM9RE
+channels:
+  - conda-forge  
+  - bioconda
+#  - defaults
+#  - r
+dependencies:
+  - bedtools=2.27.1
+  - samtools=1.9
+  - r-essentials
+  - r-base
+  - r-optparse
+#  - blast=2.10.1
+#  - perl-bioperl
+
