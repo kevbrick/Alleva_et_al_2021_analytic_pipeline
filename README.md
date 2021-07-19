@@ -13,9 +13,9 @@ For a stand-alone app to genotype PRDM9 from a long-read FASTA file, see:
 The pipeline is built in nextflow (nextflow.io) using singularity. It has been tested using nextflow/20.10.0 and singularity/3.6.4. Earlier versions of nextflow will not work.
 
 ### ACCESSORY DATA: 
-Post-basecalling FASTA files for all samples are needed to run the pipeline. These can be obtained from:
+Post-basecalling FASTA files for all samples are needed to run the pipeline. These can be obtained from Zenodo (10.5281/zenodo.5106276):
 
-`https://hpc.nih.gov/~brickkm/alleva2021/alleva2021.tar.gz` 
+`https://zenodo.org/record/5106276/files/alleva_fasta.tar.gz` 
 
 Extract this tar in the folder that contains the Alleva_et_al_2021_analytic_pipeline.nf script.
 
@@ -23,3 +23,4 @@ Extract this tar in the folder that contains the Alleva_et_al_2021_analytic_pipe
 Clone the repo. From the source folder, run:
 
 `bash run_Alleva_et_al_2021_analytic_pipeline.sh`
+
