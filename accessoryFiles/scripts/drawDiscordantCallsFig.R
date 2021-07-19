@@ -257,7 +257,7 @@ plotLengthBiases <- function(dfNanopore, dfPacbio){
 }
 ################################################################################
 
-prdm9_Bonito <- read.table('prdm9_haplotypes.bonito1d.tab', header=TRUE, stringsAsFactors = FALSE)
+prdm9_Bonito <- read.table('prdm9_haplotypes.ont.tab', header=TRUE, stringsAsFactors = FALSE)
 prdm9_Pacbio <- read.table('prdm9_haplotypes.pacbio.tab'  , header=TRUE, stringsAsFactors = FALSE)
 
 dfBon <- prdm9_Bonito %>% 

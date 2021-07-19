@@ -173,9 +173,11 @@
     dfPerHS <- dfMeltHeat %>% 
       group_by(sample) %>% 
       add_tally(strength,name = "tot") %>%
-      dplyr:::filter(hsSrc != "X")
+      group_by(sample,hsSrc,tot) %>% 
+      tally(strength,name = "n") %>%
+      mutate(pc=n/tot*100)
     
-    gF <- ggplot(dfPer,aes(y=sample,x=pc,fill=hsSrc)) + 
+    gF <- ggplot(dfPerHS,aes(y=sample,x=pc,fill=hsSrc)) + 
       geom_bar(stat='identity',color='black',lwd=.3) + 
       xlab('Total strength (%)') + ylab('') + 
       scale_fill_manual("Hotspots defined by: ",
@@ -186,7 +188,12 @@
                                  "C"="slateblue2",
                                  "L4"="orchid"))
     
-    gG <- ggplot(dfPerHS,aes(y=sample,fill=hsSrc,x=strength/tot*100)) + 
+    dfPerHSBP <- dfMeltHeat %>% 
+      group_by(sample) %>% 
+      add_tally(strength,name = "tot") %>%
+      dplyr:::filter(hsSrc != "X")
+    
+    gG <- ggplot(dfPerHSBP,aes(y=sample,fill=hsSrc,x=strength/tot*100)) + 
       geom_boxplot(outlier.alpha=0,notch=TRUE,lwd=.3,
                    position = position_dodge(preserve = "single")) + 
       scale_fill_manual("Hotspots defined by: ",

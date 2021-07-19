@@ -24,7 +24,7 @@ manifest {
 singularity.enabled = true
 singularity.autoMounts = true
 singularity.envWhitelist='https_proxy,http_proxy,ftp_proxy,DISPLAY,NXF_GENOMES'
-singularity.runOptions=" -B \$NXF_GENOMES -B ${params.accessorydir} -B ${params.pipedir} -B ${launchDir}/${params.outdir}"
+singularity.runOptions=" -B \$NXF_GENOMES -B ${params.accessorydir} -B ${params.pipedir} -B ${launchDir}"
 
 process{
 
@@ -90,26 +90,12 @@ process{
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
-  withName:drawFigure1_1D2{
-    cpus = { 1 }
-    memory = { 8.GB }
-    time = { 0.5.h * task.attempt}
-    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  }
-
   withName:drawFigure2{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt}
     container = "docker://kevbrick/alleva_r:2.0"
   }
-
-  // withName:drawFigure3{
-  //   cpus = { 1 }
-  //   memory = { 8.GB }
-  //   time = { 0.5.h * task.attempt}
-  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  // }
 
   withName:drawRelatednessFigure{
     cpus = { 1 }
@@ -132,13 +118,6 @@ process{
     container = "docker://kevbrick/alleva_r:2.0"
   }
 
-  // withName:drawFigure3MMSupp{
-  //   cpus = { 1 }
-  //   memory = { 8.GB }
-  //   time = { 0.5.h * task.attempt}
-  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  // }
-
   withName:drawGelQuantificationFigure{
     cpus = { 1 }
     memory = { 8.GB }
@@ -150,13 +129,6 @@ process{
     cpus = { 1 }
     memory = { 8.GB }
     time = { 1.h * task.attempt}
-    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  }
-
-  withName:getMousePrZFAs{
-    cpus = { 1 }
-    memory = { 8.GB }
-    time = { 0.5.h * task.attempt}
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
@@ -188,20 +160,6 @@ process{
     container = "docker://kevbrick/prdm9gt_callhaps:1.0"
   }
 
-  withName:inferRelatednessOfMouseAlleles{
-    cpus = { 1 }
-    memory = { 8.GB }
-    time = { 6.h * task.attempt}
-    container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  }
-
-  // withName:assessZFsThatBindSimilarSequences{
-  //   cpus = { 1 }
-  //   memory = { 8.GB }
-  //   time = { 6.h * task.attempt}
-  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  // }
-
   withName:dnaToPeptide{
     cpus = { 1 }
     memory = { 8.GB }
@@ -215,25 +173,12 @@ process{
     time = { 2.h * task.attempt}
     container = "docker://kevbrick/alleva_r:2.0"
   }
-  // withName:determineAORCtype{
-  //   cpus = { 1 }
-  //   memory = { 8.GB }
-  //   time = { 1.h * task.attempt}
-  //   container = "docker://kevbrick/prdm9gt_callhaps:1.0"
-  // }
 
   withName:processHumanHotspots{
     cpus = { 2 }
     memory = { 8.GB }
     time = { 2.h * task.attempt }
-    container = "docker://kevbrick/alleva_r:1.0"
-  }
-
-  withName:getMotifsChipmunk{
-    cpus = { 4 }
-    memory = { 8.GB }
-    time = { 16.h * task.attempt }
-    container = 'docker://kevbrick//chipmunk:1.0'
+    container = "docker://kevbrick/alleva_r:2.0"
   }
 
   withName:getMotifsMEME{

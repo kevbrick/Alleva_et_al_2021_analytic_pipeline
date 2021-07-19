@@ -25,7 +25,6 @@ if (params.help) {
 params.outdir         = ""
 params.pbfa           = ""
 params.ontfa          = ""
-params.bonito1dfa     = ""
 params.accessorydir   = ""
 
 params.genomefa       = ""
@@ -41,7 +40,7 @@ genomeIDX = file("${params.genomefa}.fai")
 //log.info
 log.info " "
 log.info "=========================================================================="
-log.info "PRDM9 genotyping PIPELINE (Version 1.0)                                "
+log.info "PRDM9 genotyping PIPELINE for Alleva et al. 2021 (Version 2.0)            "
 log.info "=========================================================================="
 log.info " "
 log.info "USAGE: "
@@ -49,8 +48,7 @@ log.info " "
 log.info "------------------------------------------------------------------------- "
 log.info "nextflow run Alleva_et_al_2021_analytic_pipeline.nf "
 log.info " --pbfa             ${params.pbfa} "
-log.info " --ontfa (ONT)      ${params.ontfa} "
-log.info " --bonito1dfa (ONT) ${params.bonito1dfa} "
+log.info " --ontfa            ${params.ontfa} "
 log.info " --outdir           ${params.outdir} "
 log.info " --accessorydir     ${params.accessorydir} "
 log.info " "
@@ -281,34 +279,12 @@ process genotypeVsZFlengthDistributions{
   """
   }
 
-process getMousePrZFAs{
-  publishDir "${params.outdir}/annotation/mousePrZFA", mode: 'copy', overwrite: true, pattern: 'PrZFA*txt'
-
-  output:
-  path('PrZFA_allele_codes.mouse.txt', emit: allele)
-  path('PrZFA_ZF_sequences.mouse.txt', emit: zf)
-  path('distinct*txt',                 emit: names)
-
-  """
-  ln -s ${params.accessorydir} accessoryFiles
-
-  cp accessoryFiles/otherdata/mouse_PrZFA_alleles_in_Pubs.txt .
-
-  perl accessoryFiles/scripts/getMMPrZFASequences.pl
-
-  perl accessoryFiles/scripts/convertFAToMousePrZFAs.pl
-
-  cut -f1 PrZFA_allele_codes.mouse.txt |uniq >distinct_PrZFA_allele_names_mouse.txt
-
-  """
-  }
-
 process analyzeDiscordancesPB_v_ONT{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
 
   input:
-  path(bonito_dets)
+  path(ont_dets)
   path(pacbio_dets)
 
   output:
@@ -318,7 +294,7 @@ process analyzeDiscordancesPB_v_ONT{
   mkdir nanopore
   mkdir pacbio
 
-  ln -s ${launchDir}/${params.outdir}/bonito1d/dets/*details.txt ./nanopore
+  ln -s ${launchDir}/${params.outdir}/ont/dets/*details.txt ./nanopore
   ln -s ${launchDir}/${params.outdir}/pacbio/dets/*details.txt ./pacbio
 
   ## GET ZFA sizes
@@ -403,32 +379,12 @@ process drawShortReadValidationFig {
   rm -f Rplots.pdf
   """
   }
-  
-process drawFigure1_1D2{
-  publishDir "${params.outdir}/figures", mode: 'copy', overwrite: true
-
-  input:
-  path(bonito_dets)
-  path(pacbio_dets)
-
-  output:
-  path('*png', emit: png)
-  path('*pdf', emit: pdf)
-
-  """
-  ln -s ${params.accessorydir} accessoryFiles
-
-  R --no-save <${params.accessorydir}/scripts/drawAllevaFigure1.R
-  R --no-save <${params.accessorydir}/scripts/drawAllevaFigure1.R
-  rm -f Rplots.pdf
-  """
-  }
 
 process drawFigure1{
   publishDir "${params.outdir}/figures", mode: 'copy', overwrite: true
 
   input:
-  path(bonito_dets)
+  path(ont_dets)
   path(pacbio_dets)
 
   output:
@@ -438,7 +394,7 @@ process drawFigure1{
   """
   ln -s ${params.accessorydir} accessoryFiles 
   
-  cp prdm9_haplotypes.bonito1d.tab prdm9_haplotypes.bonito.tab
+  cp prdm9_haplotypes.ont.tab prdm9_haplotypes.bonito.tab
   
   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure1.R
   rm -f Rplots.pdf
@@ -531,37 +487,6 @@ process drawRelatednessFigure{
   rm -f Rplots.pdf
   """
   }
-// 
-// process drawFigure3MMSupp{
-//   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
-//   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
-//   publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
-// 
-//   input:
-//   path(rtable)
-//   path(alleles)
-// 
-//   output:
-//   path('Allev*.p??',                  emit: mmFig)
-//   path('PrZFA_relatedness.mouse.tab', emit: rtab)
-// 
-//   """
-//   ln -s ${params.accessorydir} accessoryFiles
-// 
-//   grep event PrZFA_relatedness_ALLmouse.tab       |head -n1                                        >PrZFA_relatedness.mouse.tab
-//   sort -k1,1 -k2,2 PrZFA_relatedness_ALLmouse.tab |grep -v event |perl -lane 'print \$_ if (\$_)' >>PrZFA_relatedness.mouse.tab
-// 
-//   cp ${alleles} PrZFA_alleles.foundInPops.txt
-// 
-//   perl -lane '\$F[0] =~ /^(\\S+?)_(\\S+)\$/;
-//              (\$str,\$id) = (\$1,\$2);
-//              if (\$id =~ s/::(\\S+)\$//){\$pub = \$1}else{\$pub = "NA"};
-//              print join("\\t",\$str,\$F[0],\$id,\$pub,\$F[1])' PrZFA_allele_codes.mouse.txt >PrZFA_allele_details.mouse.txt
-// 
-//   R --no-save <${params.accessorydir}/scripts/drawAllevaFigure3_MouseNetworkSupp.R
-//   rm -f Rplots.pdf
-//   """
-//   }
 
 process drawGelQuantificationFigure{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
@@ -679,22 +604,6 @@ process inferRelatednessOfAlleles{
   cp ${params.accessorydir}/scripts/checkPrdm9BiParentalRecombinants.pl .
   
   perl checkForRecombinants.pl --allele ${alleles_to_check} >PrZFA_relatedness_graph.${randID}.tab
-  """
-  }
-
-process inferRelatednessOfMouseAlleles{
-  input:
-  path(alleles_to_check)
-  path(PrZFA_alleles)
-  path(PrZFA_ZFs)
-
-  output:
-  path('PrZFA_relatedness*tab', emit: pub)
-
-  """
-  ln -s ${params.accessorydir} accessoryFiles
-
-  perl ${params.accessorydir}/scripts/checkPrdm9Recombinants.pl --a ${PrZFA_alleles} --z ${PrZFA_ZFs} --c ${alleles_to_check} --o PrZFA_relatedness.\$RANDOM\$RANDOM.tab
   """
   }
 
@@ -887,8 +796,6 @@ process getLinkedAlleles{
   }
   
 process dnaToPeptide{
-  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
-  publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
   publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
 
   input:
@@ -899,7 +806,6 @@ process dnaToPeptide{
   output:
   path('PrZFA_alleles.details.txt', emit: alleles)
   path('PrZFA_ZFs.details.txt'    , emit: zfs)
-  path('*.p??'                    , emit: img)
 
   script:
   """
@@ -1039,8 +945,6 @@ process dnaToPeptide{
   join s2.txt            PrZFA_alleles.AAcontactresidues.txt |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >s3.txt
   join s3.txt            PrZFA_alleles.ACtype.txt            |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >>PrZFA_alleles.details.txt
 
-  
-  R --no-save <${params.accessorydir}/scripts/drawACtypePlot.R
   """
   }
 
@@ -1281,101 +1185,6 @@ process getMotifsMEME {
   """
   }
 
-process getMotifsChipmunk {
-
-  publishDir "${params.outdir}/humanHS/motifs/chipmunk",   mode: 'copy', overwrite: true, pattern: '*.chipmunk*'
-  publishDir "${params.outdir}/humanHS/motifs/chipmunk",   mode: 'copy', overwrite: true, pattern: '*.dichipmunk*'
-  //publishDir "${params.outdir}/humanHS/motifs/chiphorde",   mode: 'copy', overwrite: true, pattern: '*.chiphorde*'
-  //publishDir "${params.outdir}/humanHS/motifs/dichiphorde", mode: 'copy', overwrite: true, pattern: '*.dichiphorde*'
-  publishDir "${params.outdir}/humanHS/motifs",            mode: 'copy', overwrite: true, pattern: '*png'
-  publishDir "${params.outdir}/humanHS/motifs",            mode: 'copy', overwrite: true, pattern: '*density.txt'
-
-  tag { fasta }
-
-  input:
-  path(fasta)
-  path(wideFA)
-
-  output:
-  path("*.chipmunk*",    optional: true, emit: cm)
-  path("*.dichipmunk*",  optional: true, emit: dcm)
-  //path("*.chiphorde*",   optional: true, emit: ch)
-  //path("*.dichiphorde*", optional: true, emit: dch)
-  path("*motifdensity*", optional: true, emit: motifdist)
-
-  script:
-  def name  = fasta.name.replaceFirst(".chipmunk.fa","")
-
-  """
-  ruby /opt/chipmunk/run_chipmunk8.rb     ${name}.chipmunk    24 12 yes 1.0 m:${fasta} || true
-  ruby /opt/chipmunk/run_dichipmunk8.rb   ${name}.dichipmunk  24 12 yes 1.0 m:${fasta} || true
-  #ruby /opt/chipmunk/run_chiphorde8.rb    ${name}.chiphorde   24:12,24:12 filter verbose=yes 1.0 m:${fasta} || true
-  #ruby /opt/chipmunk/run_dichiphorde8.rb  ${name}.dichiphorde 24:12,24:12 filter verbose=yes 1.0 m:${fasta} || true
-
-  for pcm in *.pcm; do
-    png=\${pcm/pcm/FWD.png}
-    ruby /opt/chipmunk/pmflogo3.rb \$pcm \$png 1 100 400 weblogo no
-    png=\${pcm/pcm/REV.png}
-    ruby /opt/chipmunk/pmflogo3.rb \$pcm \$png 1 100 400 weblogo yes
-  done
-
-  for pcm in *.dpcm; do
-    png=\${pcm/dpcm/FWD.png}
-    ruby /opt/chipmunk/dpmflogo3.rb \$pcm \$png 100 400
-    png=\${pcm/dpcm/REV.png}
-    ruby /opt/chipmunk/dpmflogo3_rc.rb \$pcm \$png 100 400
-  done
-
-  mfile=${name}".chipmunkmotifdensity.txt";
-  echo -e "hotspots\\ttype\\tmotifsrc\\tscore\\tpos\\tstrand\\tcs\\tfrom\\tto\\tstrength\\tallele" >\$mfile
-
-  for fa in *.bigwin.fa; do
-    genotype=\${fa/.bigwin.fa};
-
-    for pwm in *.pwm; do
-      motifsource=\${pwm/.chipmunk.pwm/}
-      java -cp \$SARUSJAR ru.autosome.SARUS \$fa \$pwm 1 transpose |perl -lane 'if (\$_ =~ /\\>\\s*(.+)\$/){@nm = split(":",\$1); next}; print join("\\t","'\$genotype'","mono","'\$motifsource'",\$_,@nm)' >>\$mfile
-    done
-
-    for dpwm in *.dpwm; do
-      motifsource=\${pwm/.chipmunk.dpwm/}
-      java -cp \$SARUSJAR ru.autosome.di.SARUS \$fa \$dpwm 1 transpose |perl -lane 'if (\$_ =~ /\\>\\s*(.+)\$/){@nm = split(":",\$1); next}; print join("\\t","'\$genotype'","di","'\$motifsource'",\$_,@nm)' >>\$mfile
-    done
-  done
-
-  """
-  }
-
-process drawMotifBSClustering {
-
-  publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*png'
-  publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*pdf'
-  publishDir "${params.outdir}/humanHS/motifPWM", mode: 'copy', overwrite: true, pattern: '*pwm'
-
-  input:
-  path(meme)
-  path(hs)
-
-  output:
-  path("*png", emit: png)
-  path("*pdf", emit: pdf)
-  path("*pwm", emit: prdm9PredictedBS)
-
-  script:
-  """
-  ln -s ${params.accessorydir} accessoryFiles
-
-  ln -s \$pwdpred_dir/hmmsearch .
-  ln -s \$pwdpred_dir/zf_C2H2.ls.hmm .
-  ln -s \$pwdpred_dir/SVMp4.mod .
-  
-  \$pwdpred_dir/pwm_predict -m SVMp pubAlleles.AA.fa
-
-  R --no-save <accessoryFiles/scripts/drawPRDM9BSpredictionsPlot.R
-  rm -f Rplots.pdf
-  """
-  }
-
 process drawHotspotsFigure {
 
   publishDir "${params.outdir}/figures",          mode: 'copy', overwrite: true, pattern: '*png'
@@ -1410,25 +1219,7 @@ process drawHotspotsFigure {
   rm -f Rplots.pdf
   """
   }
-// 
-// process generateNumbersForFinalPaper{
-// 
-//   publishDir "${params.outdir}/papernumbers",          mode: 'copy', overwrite: true, pattern: '*txt'
-// 
-//   input:
-//   path(hs)
-// 
-//   output:
-//   path("*txt", emit: txt)
-// 
-//   script:
-//   """
-//   ln -s ${params.accessorydir} accessoryFiles
-// 
-// 
-//   """
-//   }
-//#############################################
+
 workflow faToGenotype{
   take:
   name
@@ -1456,25 +1247,6 @@ workflow faToGenotype{
 
   }
 
-workflow genotypeFromBonito {
-  take:
-  pubZFs
-  pubAlleles
-
-  main:
-  bonito_fa = Channel.fromPath("${params.ontfa}/*.fa")
-  raw_fasta = merge_raw_fa(bonito_fa.collect(),'ont')
-
-  // This is required to convert the ArrayList output to a Channel !
-  raw_fa     = raw_fasta.fa.flatten().map { sample -> file(sample) }
-
-  genotypes = faToGenotype("bonito", raw_fa,  pubZFs, pubAlleles)
-  //genotypes = faToGenotype("bonito", raw_fasta,  pubZFs, pubAlleles)
-
-  emit:
-  genotypes
-  }
-
 workflow genotypeFromPacbio {
   take:
   pubZFs
@@ -1494,20 +1266,19 @@ workflow genotypeFromPacbio {
   genotypes
   }
 
-workflow genotypeFromBonito1D {
+workflow genotypeFromONT {
   take:
   pubZFs
   pubAlleles
 
   main:
-  //raw_fasta = Channel.fromPath("${params.pbfa}/*.fa")
-  in_fa = Channel.fromPath("${params.bonito1dfa}/*.fa")
-  raw_fasta = merge_raw_fa(in_fa.collect(),'bonito1d')
+  in_fa = Channel.fromPath("${params.ontfa}/*.fa")
+  raw_fasta = merge_raw_fa(in_fa.collect(),'ont')
 
-  // This is required to convert the ArrayList output to a Channel !
+  // This is required to convert the ArrayList output to a Channel 
   raw_fa     = raw_fasta.fa.flatten().map { sample -> file(sample) }
 
-  genotypes = faToGenotype("bonito1d", raw_fa,  pubZFs, pubAlleles)
+  genotypes = faToGenotype("ont", raw_fa,  pubZFs, pubAlleles)
 
   emit:
   genotypes
@@ -1519,7 +1290,7 @@ workflow genotypeFromMerge {
   pubAlleles
 
   main:
-  ontFA    = Channel.fromPath("${params.bonito1dfa}/*.fa")
+  ontFA    = Channel.fromPath("${params.ontfa}/*.fa")
   pbFA     = Channel.fromPath("${params.pbfa}/*.fa")
 
   raw_fasta  = merge_raw_fa(ontFA.join(pbFA, remainder: true).collect(),'pb_ont')
@@ -1539,18 +1310,15 @@ workflow {
   aData    = get_known_human_prdm9_data()
   bsAlleles = get_jeffreys_blood_and_sperm_variants_only()
   
-//gt_guppy  = genotypeFromGuppy(aData.hsZFs,aData.hsAlleles)
-  gt_bonito = genotypeFromBonito(aData.hsZFs,aData.hsAlleles)
-  gt_pacbio = genotypeFromPacbio(aData.hsZFs,aData.hsAlleles)
-  gt_bonito1d  = genotypeFromBonito1D(aData.hsZFs,aData.hsAlleles)
-  gt_final  = genotypeFromMerge(aData.hsZFs,aData.hsAlleles)
+  gt_pacbio   = genotypeFromPacbio(aData.hsZFs,aData.hsAlleles)
+  gt_nanopore = genotypeFromONT(aData.hsZFs,aData.hsAlleles)
+  gt_final    = genotypeFromMerge(aData.hsZFs,aData.hsAlleles)
   
   prZFAData = mergePublishedAndFoundAlleles(gt_final,aData.hsZFs,aData.hsAlleles)
-  //mmZFAData = getMousePrZFAs()
 
   figGels   = drawGelQuantificationFigure(gt_final)
 
-  caveatFig = analyzeDiscordancesPB_v_ONT(gt_bonito1d, gt_pacbio)
+  caveatFig = analyzeDiscordancesPB_v_ONT(gt_nanopore, gt_pacbio)
 
   // Infer alleles that bind common seqs
   //prZFAA    = assessZFsThatBindSimilarSequences(prZFAData.allele,prZFAData.zf)
@@ -1563,8 +1331,7 @@ workflow {
                                                 prZFAA.zfs)
   figValid      = drawShortReadValidationFig(gt_validation.tab.collect())
   
-  //fig1Data  = drawFigure1_1D2(gt_bonito, gt_pacbio)
-  fig1Data  = drawFigure1(gt_bonito1d, gt_pacbio)
+  fig1Data  = drawFigure1(gt_nanopore, gt_pacbio)
   fig2Data  = drawFigure2(gt_final, prZFAA.alleles)
 
   // Human PrZFA network
@@ -1587,42 +1354,13 @@ workflow {
                                     aLink.clust.collect(),
                                     aLink.map.collect(),
                                     aLink.snpseq.collect())
-                                    
-  // Mouse PrZFA network
-  //mmZFARel  = inferRelatednessOfMouseAlleles(mmZFAData.names.splitText( by: 4, file: true ),mmZFAData.allele,mmZFAData.zf)
-  //fig3MMSu  = drawFigure3MMSupp(mmZFARel.pub.collectFile(name: 'PrZFA_relatedness_ALLmouse.tab', newLine: true), mmZFAData.allele)
 
-  // Figure 4 : SSDS & Motifs
+  // Hotspots figure : SSDS & Motifs
   hotspots   = Channel.fromPath("${params.hs}/*.bedgraph")
-  //hapTable   = Channel.fromPath("${params.hapdir}/haplotypesTable/prdm9_haplotypes.tab")
-  pubData    = Channel.fromPath("${params.hapdir}/publishedData/*")
 
   hsData     = processHumanHotspots(hotspots.collect())
 
   memeMotifs = getMotifsMEME(hsData.memeFA.flatten(), hsData.wideFA.collect())
 
   fig5Data   = drawHotspotsFigure(memeMotifs.meme.collect(), hsData.table)
-  //cmMotifs   = getMotifsChipmunk(hsData.chipmunkFA.flatten(), hsData.wideFA.collect())
 }
-
-
-// process getErrorRates{
-//   publishDir "${params.outdir}/figures", mode: 'copy', overwrite: true
-//
-//   input:
-//   path(guppy)
-//   path(bonito)
-//   path(pacbio)
-//
-//   output:
-//   path('*png', emit: png, optional: true)
-//   path('*pdf', emit: pdf, optional: true)
-//
-//   """
-//   cut  -f1       prdm9_haplotypes.guppy.tab           >g1.txt
-//   grep -f g1.txt prdm9_haplotypes.bonito.tab |cut -f1 >g2.txt
-//   grep -f g2.txt prdm9_haplotypes.pacbio.tab |cut -f1 >g3.txt
-//   grep -f g3.txt prdm9_haplotypes.final.tab  |grep -P 'A\/A' |cut -f1 |shuf |head -n20 >r20.txt
-//
-//   """
-//   }
