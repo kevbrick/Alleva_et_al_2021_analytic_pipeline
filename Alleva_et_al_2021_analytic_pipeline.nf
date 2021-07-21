@@ -181,7 +181,8 @@ process extractZFsfromRawFA{
 
 process makeHaplotypeTable{
   publishDir "${params.outdir}/haplotypesTable/${type}", mode: 'copy', overwrite: true
-
+  publishDir "${params.outdir}/suppFiles", mode: 'copy', overwrite: true, pattern: 'File_S*txt'
+  
   input:
   val(type)
   path(haps)
@@ -189,8 +190,9 @@ process makeHaplotypeTable{
   path(zffa)
 
   output:
-  path('prdm9_haplotypes.*.tab', emit: hap)
-  path('new*',                   emit: newZF)
+  path('prdm9_haplotypes.*.tab',     emit: hap)
+  path('new*',                       emit: newZF)
+  path('File_S*txt', optional: true, emit: suppFile)
 
   """
   perl ${params.accessorydir}/scripts/gatherHaps.pl >allhap.txt
@@ -226,11 +228,37 @@ process makeHaplotypeTable{
   grep -v -f kids.txt prdm9_haplotypes.${type}.tmp |perl -lane 'push @F, (\$_ =~ /allele_1_code/)?"is_child":"FALSE"; print join("\\t",@F)'  >withkids.tmp
   grep    -f kids.txt prdm9_haplotypes.${type}.tmp |perl -lane 'push @F, "TRUE"; print join("\\t",@F)'                                      >>withkids.tmp
 
-  grep allele_1_code withkids.tmp                         >prdm9_haplotypes.${type}.tab
+  echo "## Details of PRDM9 diploid genotypes for individuals (from ${type} data)"                >prdm9_haplotypes.${type}.tab
+  echo "## ------------------------------------------------------------------------------------  >>prdm9_haplotypes.${type}.tab  
+  echo "## id             Sample identifier from 1000 genomes or custom ID from non-1KG samples" >>prdm9_haplotypes.${type}.tab
+  echo "## pop            3-letter code for 1KG population (OTH = other)"                        >>prdm9_haplotypes.${type}.tab
+  echo "## homhet         Homozygous (hom) or heterozygous (het) for PRDM9"                      >>prdm9_haplotypes.${type}.tab
+  echo "## allele_1       First PRDM9 allele (Unk = unknown)"                                    >>prdm9_haplotypes.${type}.tab
+  echo "## allele_2       Second PRDM9 allele (Unk = unknown)"                                   >>prdm9_haplotypes.${type}.tab
+  echo "## allele_1_code  ZF code for PRDM9 allele 1 (UU = undetermined ZF)"                     >>prdm9_haplotypes.${type}.tab
+  echo "## allele_2_code  ZF code for PRDM9 allele 2 (UU = undetermined ZF)"                     >>prdm9_haplotypes.${type}.tab
+  echo "## size_1         number of ZFs in allele 1"                                             >>prdm9_haplotypes.${type}.tab
+  echo "## size_2         number of ZFs in allele 2"                                             >>prdm9_haplotypes.${type}.tab
+  echo "## seq_1          nucleotide sequence of allele 1 "                                      >>prdm9_haplotypes.${type}.tab
+  echo "##                (Sequence of undetermined ZF is masked with "U")"                      >>prdm9_haplotypes.${type}.tab
+  echo "## seq_2          nucleotide sequence of allele 2 "                                      >>prdm9_haplotypes.${type}.tab
+  echo "##                (Sequence of undetermined ZF is masked with "U")"                      >>prdm9_haplotypes.${type}.tab
+  echo "## nseqs          number of long reads for this individual"                              >>prdm9_haplotypes.${type}.tab
+  echo "## nzfseqs        number of long reads with an intact ZF-array that coincide with"       >>prdm9_haplotypes.${type}.tab
+  echo "##                the lengths of the two alleles. Max ZF-arryas identified per "         >>prdm9_haplotypes.${type}.tab
+  echo "##                individual = 2,000"                                                    >>prdm9_haplotypes.${type}.tab
+  echo "## is_child       is this individual a child of other individuals in this study"         >>prdm9_haplotypes.${type}.tab
+  echo "##               (for YRI trios)"                                                        >>prdm9_haplotypes.${type}.tab
+
+  grep allele_1_code withkids.tmp                        >>prdm9_haplotypes.${type}.tab
   sort -k1,1         withkids.tmp |grep -v allele_1_code >>prdm9_haplotypes.${type}.tab
 
   touch newAlleles.txt
   touch newZFs.txt
+
+  if [ "${type}" == "final" ]; then 
+    cp prdm9_haplotypes.${type}.tab File_S1_PRDM9_genotypes.txt
+  fi
   """
   }
 
@@ -426,6 +454,7 @@ process drawFigure2{
 process drawAssociationsFigure{
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*png'
   publishDir "${params.outdir}/figures",    mode: 'copy', overwrite: true, pattern: '*pdf'
+  publishDir "${params.outdir}/suppFiles", mode: 'copy', overwrite: true, pattern: 'File_S*txt'
 
   input:
   path(prdm9)
@@ -436,6 +465,7 @@ process drawAssociationsFigure{
   path(snpseq)
 
   output:
+  path('File_S4*txt',             emit: assocDets)
   path('Alleva_et_al_Fig*p*',     emit: mainFig)
   path('Alleva_et_al_Sup*p*',     emit: suppFigs)
   path('Alleva_et_al_Associ*tab', emit: cmhTable)
@@ -443,6 +473,51 @@ process drawAssociationsFigure{
   """
   ln -s ${params.accessorydir} accessoryFiles
 
+  ## MAKE ASSOCIATIONS SUPP FILE
+  cp prdm9AS.Alike.mod.cmh prdm9AS.A-type.mod.cmh
+  cp prdm9AS.Clike.mod.cmh prdm9AS.C-type.mod.cmh
+
+  for x in 'A-type' 'C-type' 'A' 'B' 'C' 'L14'; do 
+    sort -k7rn,7rn prdm9AS.\$x.mod.cmh | \
+                  perl -lane 'BEGIN{print join("\\t","CHR","SNP","BP","A1", 
+                                                     "MAF","A2","CHISQ",
+                                                     "-log10P","OR","SE",
+                                                     "L95","U95","transcript",
+                                                     "zfdomain","exon","allele")} 
+                              next if (\$F[7] == 0 || \$F[7] eq "NA"); 
+                              \$F[7] = -log(\$F[7])/log(10); 
+                              print join("\\t",@F[0..11],@F[13..15],"PRDM9-'\$x'") if (\$F[7] > 2)' >PRDM9_\$x.associations.txt
+  done
+
+  pldets='; from PLINK CMH file (see https://zzz.bwh.harvard.edu/plink/anal.shtml)'
+
+  echo "##Details of SNP association analyses for each allele / allele group"         >File_S4_SNP_associations.txt
+  echo "##------------------------------------------------------------------"         >>File_S4_SNP_associations.txt
+  echo "##Only SNPs with P < 0.01 are shown. File ordered by p-value."                >>File_S4_SNP_associations.txt
+  echo "##------------------------------------------------------------------"         >>File_S4_SNP_associations.txt
+  echo "##CHR        : Chromosome\$pldets"                                            >>File_S4_SNP_associations.txt
+  echo "##SNP        : SNP ID\$pldets"                                                >>File_S4_SNP_associations.txt
+  echo "##BP         : Physical SNP position (base-pair)\$pldets"                     >>File_S4_SNP_associations.txt
+  echo "##A1         : Minor allele code\$pldets"                                     >>File_S4_SNP_associations.txt
+  echo "##MAF        : Minor allele frequency"                                        >>File_S4_SNP_associations.txt
+  echo "##A2         : Major allele code\$pldets"                                     >>File_S4_SNP_associations.txt
+  echo "##CHISQ      : Cochran-Mantel-Haenszel statistic (1df)\$pldets"               >>File_S4_SNP_associations.txt
+  echo "##-log10P    : Asymptotic -log10 p-value for CMH test\$pldets"                >>File_S4_SNP_associations.txt
+  echo "##OR         : CMH odds ratio\$pldets"                                        >>File_S4_SNP_associations.txt
+  echo "##SE         : Standard error\$pldets"                                        >>File_S4_SNP_associations.txt
+  echo "##L95        : Lower bound on confidence interval for CMH odds ratio\$pldets" >>File_S4_SNP_associations.txt
+  echo "##U95        : Upper bound on confidence interval for CMH odds ratio\$pldets" >>File_S4_SNP_associations.txt
+  echo "##transcript : SNP is within PRDM9 transcript locus: 1=YES; 0=NO"             >>File_S4_SNP_associations.txt
+  echo "##zfdomain   : SNP is within PRDM9 ZF coding domains: 1=YES; 0=NO"            >>File_S4_SNP_associations.txt
+  echo "##exon       : SNP is within a PRDM9 exon: 1=YES; 0=NO"                       >>File_S4_SNP_associations.txt
+  echo "##allele     : PRDM9 allele for association test"                             >>File_S4_SNP_associations.txt
+
+  head -n 1 PRDM9_A-type.associations.txt >>File_S4_SNP_associations.txt
+
+  sort -k7rn,7rn PRDM9*assoc*txt |grep -v CHISQ >>File_S4_SNP_associations.txt 
+
+  ## END MAKING ASSOCIATION SUPP FILE #########################################
+  
   for cmh in `ls *cmh`; do
     head \$cmh -n1 |perl -lane 'chomp; print \$_."\\tphenotype"' >header.tab
     phenotype=`echo \$cmh |perl -pi -e 's/prdm9AS\\.(.+?)\\.mod\\.cmh\$/\$1/' |perl -pi -e 's/like/\\-type/'`
@@ -797,6 +872,7 @@ process getLinkedAlleles{
   
 process dnaToPeptide{
   publishDir "${params.outdir}/annotation", mode: 'copy', overwrite: true, pattern: '*txt'
+  publishDir "${params.outdir}/suppFiles", mode: 'copy', overwrite: true, pattern: 'File_S*txt'
 
   input:
   path(PrZFA_alleles)
@@ -805,7 +881,8 @@ process dnaToPeptide{
   
   output:
   path('PrZFA_alleles.details.txt', emit: alleles)
-  path('PrZFA_ZFs.details.txt'    , emit: zfs)
+  path('PrZFA_ZFs.details.txt'    , emit: zfs)  
+  path('File_S*.txt',               emit: suppFiles)
 
   script:
   """
@@ -945,6 +1022,8 @@ process dnaToPeptide{
   join s2.txt            PrZFA_alleles.AAcontactresidues.txt |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >s3.txt
   join s3.txt            PrZFA_alleles.ACtype.txt            |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |sort >>PrZFA_alleles.details.txt
 
+  cp PrZFA_ZFs.details.txt     File_S2_PRDM9_ZF_details.txt
+  cp PrZFA_alleles.details.txt File_S3_PRDM9_allele_details.txt
   """
   }
 

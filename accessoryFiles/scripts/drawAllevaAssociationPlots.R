@@ -494,7 +494,7 @@ df4X <- rbind(gA$data,
               gC$data,
               gL14$data)
 
-df4X$test <- factor(df4X$test,levels=paste0(c('Alike','Clike','A','C','B','L14'),' carriers'))
+df4X$test <- factor(df4X$test,levels=paste0(c('Alike','Clike','A','B','C','L14'),' carriers'))
 
 gLikeCS   <- drawManhattanPlot(dfLike)
 g4XCS     <- drawManhattanPlot(df4X)
