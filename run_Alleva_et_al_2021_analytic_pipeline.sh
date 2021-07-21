@@ -5,10 +5,7 @@ module load singularity
 if [ ! -f "accessoryFiles/hg38_genome/genome.fa" ]; then 
 	echo "Getting hg38 genome FASTA ..."
 	bash accessoryFiles/hg38_genome/getGenome.sh
-	exit 1
 fi
-
-exit 1
 
 nextflow run Alleva_et_al_2021_analytic_pipeline.nf -c config_Analyses.nf -resume modest_leakey\
   --pipedir      `pwd` \
