@@ -7,7 +7,7 @@ if [ ! -f "accessoryFiles/hg38_genome/genome.fa" ]; then
 	bash accessoryFiles/hg38_genome/getGenome.sh
 fi
 
-nextflow run Alleva_et_al_2021_analytic_pipeline.nf -c config_Analyses.nf -resume modest_leakey\
+nextflow run Alleva_et_al_2021_analytic_pipeline.nf -c config_Analyses.nf \
   --pipedir      `pwd` \
   --ontfa        `pwd`/fasta/nanopore \
   --pbfa         `pwd`/fasta/pacbio \

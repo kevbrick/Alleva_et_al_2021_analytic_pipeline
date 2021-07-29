@@ -81,7 +81,7 @@ sub getZFsFromBerg2010{
 sub getZFsFromJeffreys2012{
   system('wget https://www.pnas.org/content/pnas/suppl/2012/12/23/1220813110.DCSupplemental/sfig02.pdf');
 
-  my $cmd = 'pdftotext -layout sfig02.pdf /dev/stdout |./replaceUnicode ';
+  my $cmd = 'pdftotext -layout sfig02.pdf /dev/stdout |replaceUnicode ';
 
   my $nxt = 'A';
 
@@ -194,7 +194,7 @@ sub getZFsFromBaudat2010{
 sub getAllelesFromBerg2010{
   system('wget https://static-content.springer.com/esm/art%3A10.1038%2Fng.658/MediaObjects/41588_2010_BFng658_MOESM6_ESM.pdf');
 
-  my $cmd = 'pdftotext -layout -f 14 -l 14 41588_2010_BFng658_MOESM6_ESM.pdf /dev/stdout |./replaceUnicode ';
+  my $cmd = 'pdftotext -layout -f 14 -l 14 41588_2010_BFng658_MOESM6_ESM.pdf /dev/stdout |replaceUnicode ';
 
   open my $PIPE, '-|', $cmd;
 
@@ -214,7 +214,7 @@ sub getAllelesFromBerg2010{
 sub getAllelesFromJeffreys2012{
   system('wget https://www.pnas.org/content/pnas/suppl/2012/12/23/1220813110.DCSupplemental/sfig04.pdf');
 
-  my $cmd = 'pdftotext -layout sfig04.pdf /dev/stdout |./replaceUnicode ';
+  my $cmd = 'pdftotext -layout sfig04.pdf /dev/stdout |replaceUnicode ';
 
   open ALLELES, '>', 'PRDM9_Alleles_Jeffreys_2010.txt';
   open my $PIPE, '-|', $cmd;

@@ -476,8 +476,8 @@ SNPsUsed <- lAll$dataSimple[,c('ID','phenotype')] %>% distinct()
 #-----------------------------------------------------------
 # Manhattan Plots
 
-gAl <- plinkplot('prdm9AS.Alike.mod.cmh',"Alike carriers",SNPsUsed %>% dplyr:::filter(phenotype == 'A-type') %>% select(ID))
-gCl <- plinkplot('prdm9AS.Clike.mod.cmh',"Clike carriers",SNPsUsed %>% dplyr:::filter(phenotype == 'C-type') %>% select(ID))
+gAl <- plinkplot('prdm9AS.Alike.mod.cmh',"A-type carriers",SNPsUsed %>% dplyr:::filter(phenotype == 'A-type') %>% select(ID))
+gCl <- plinkplot('prdm9AS.Clike.mod.cmh',"C-type carriers",SNPsUsed %>% dplyr:::filter(phenotype == 'C-type') %>% select(ID))
 
 dfLike <- rbind(gAl$data,
                 gCl$data)
@@ -494,7 +494,7 @@ df4X <- rbind(gA$data,
               gC$data,
               gL14$data)
 
-df4X$test <- factor(df4X$test,levels=paste0(c('Alike','Clike','A','B','C','L14'),' carriers'))
+df4X$test <- factor(df4X$test,levels=paste0(c('A-type','C-type','A','B','C','L14'),' carriers'))
 
 gLikeCS   <- drawManhattanPlot(dfLike)
 g4XCS     <- drawManhattanPlot(df4X)
@@ -562,9 +562,9 @@ gOut    <- ggarrange(ggFinal,
                      hjust=0,vjust=1,
                      heights=c(1,1.4))
 
-ggsave('Alleva_et_al_Figure_SNP_Associations.png',gOut,width=8,height=7)
+ggsave('Alleva_et_al_Figure_SNP_Associations.png',gOut,width=8,height=7,bg = 'white')
 ggsave('Alleva_et_al_Figure_SNP_Associations.pdf',gOut,width=8,height=7)
 
 gSupp   <- lAll$gPopBubb
-ggsave('Alleva_et_al_Supplement_Associations_Plot.png',gSupp,width=8,height=9)
+ggsave('Alleva_et_al_Supplement_Associations_Plot.png',gSupp,width=8,height=9,bg = 'white')
 ggsave('Alleva_et_al_Supplement_Associations_Plot.pdf',gSupp,width=8,height=9)

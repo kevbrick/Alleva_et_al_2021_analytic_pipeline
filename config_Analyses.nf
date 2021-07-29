@@ -32,7 +32,7 @@ process{
     cpus = { 2 }
     memory = { 8.GB }
     time = { 0.5.h * task.attempt }
-    //container = "docker://kevbrick/parsetools:1.0"
+    container = "docker://kevbrick/parse_pub_prdm9:1.0"
   }
 
   withName:merge_raw_fa{

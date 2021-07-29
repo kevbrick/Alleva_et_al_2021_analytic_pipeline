@@ -201,7 +201,7 @@ drawONTvPB <- function(){
           axis.text.y = element_text(hjust=0.5)) + 
     geom_hline(yintercept=3.5,lty='dashed',lwd=.2) +
     coord_cartesian(xlim=c(0,100),ylim=c(0.5,4.5),expand=FALSE,clip='off') +
-    geom_text(x=5,aes(label=paste0(round(pc,1),"%; N=",nn)),size=7*5/14,color='white',hjust=0)
+    geom_text(x=5,aes(label=paste0(round(pc,1),"%; N=",nn,'/',n)),size=7*5/14,color='white',hjust=0)
   
   gN <- ggplot(df[df$agree,],aes(x=pbHH,y=nn,fill=agree)) + geom_bar(stat='identity') +  
     scale_fill_manual(values=c('grey50','firebrick')) + xlab('') + ylab('Concordant (#)') + 
@@ -227,7 +227,7 @@ gACD <- ggarrange(gMap,gAlleles,gONTvPB$gPC + theme(plot.margin=unit(c(0,0.2,0,0
                  font.label = c(size=9))
 
 img <- readPNG("accessoryFiles/otherdata/Alleva_Schematic.png")
-gB <- rasterGrob(img, interpolate=TRUE)
+gB <- rasterGrob(img, interpolate=TRUE, )
 
 gAll <- ggarrange(gACD,gB,
                   ncol=1,nrow=2,
@@ -235,5 +235,5 @@ gAll <- ggarrange(gACD,gB,
                   labels =c('','B'),
                   font.label = c(size=9))
 
-ggsave('Alleva_et_al_Figure1.png',gAll,height=5.1, width=7.2,dpi = 500)
+ggsave('Alleva_et_al_Figure1.png',gAll,height=5.1, width=7.2,dpi = 500, bg='white')
 ggsave('Alleva_et_al_Figure1.pdf',gAll,height=5.7, width=7.2)

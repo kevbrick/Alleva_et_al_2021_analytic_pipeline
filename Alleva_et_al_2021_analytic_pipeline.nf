@@ -59,11 +59,12 @@ process get_known_human_prdm9_data {
   publishDir "output/publishedData", mode: 'copy', overwrite: true
 
   output:
-  path('humanPRDM9ZFcodes.BergJeffreys.txt',         emit: hsZFs)
-  path('humanPRDM9alleles.BergJeffreys.txt',         emit: hsAlleles)
-  path('humanPRDM9alleles.BergJeffreys.fa',          emit: hsFA)
-  path('humanPRDM9alleles.BergJeffreys.withSeq.txt', emit: hsAlleleSeq)
-  path('individuals.1KG.tab',                        emit: popData)
+  path('humanPRDM9ZFcodes.BergJeffreys.txt',          emit: hsZFs)
+  path('humanPRDM9alleles.BergJeffreys.txt',          emit: hsAlleles)
+  path('humanPRDM9alleles.BergJeffreys.fa',           emit: hsFA)
+  path('humanPRDM9alleles.BergJeffreys.withSeq.txt',  emit: hsAlleleSeq)
+  path('individuals.1KG.tab',                         emit: popData)
+  path('humanPRDM9alleles.BloodandSpermVariants.txt', emit: bsAll)
 
   """
   cp ${params.accessorydir}/scripts/getPRDM9ZFs_JeffreysAndBerg.pl .
@@ -81,21 +82,6 @@ process get_known_human_prdm9_data {
     perl -lane 'if (s/^.+((HG|NA)\\d+).+?(female|male).+/"'\$2'\\t'\$1'\\t\$1\\t".lc(\$3)/ie){print \$_}' \$1.tab |sort -k2,2 >>individuals.1KG.tab
   done
 
-  """
-  }
-
-process get_jeffreys_blood_and_sperm_variants_only {
-
-  publishDir "output/publishedData", mode: 'copy', overwrite: true
-
-  output:
-  path('humanPRDM9alleles.BloodandSpermVariants.txt',  emit: alleles)
-
-  """
-  cp ${params.accessorydir}/scripts/getPRDM9ZFs_JeffreysAndBerg.pl .
-  cp ${params.accessorydir}/scripts/replaceUnicode .
-
-  perl getPRDM9ZFs_JeffreysAndBerg.pl
   """
   }
 
@@ -228,37 +214,40 @@ process makeHaplotypeTable{
   grep -v -f kids.txt prdm9_haplotypes.${type}.tmp |perl -lane 'push @F, (\$_ =~ /allele_1_code/)?"is_child":"FALSE"; print join("\\t",@F)'  >withkids.tmp
   grep    -f kids.txt prdm9_haplotypes.${type}.tmp |perl -lane 'push @F, "TRUE"; print join("\\t",@F)'                                      >>withkids.tmp
 
-  echo "## Details of PRDM9 diploid genotypes for individuals (from ${type} data)"                >prdm9_haplotypes.${type}.tab
-  echo "## ------------------------------------------------------------------------------------  >>prdm9_haplotypes.${type}.tab  
-  echo "## id             Sample identifier from 1000 genomes or custom ID from non-1KG samples" >>prdm9_haplotypes.${type}.tab
-  echo "## pop            3-letter code for 1KG population (OTH = other)"                        >>prdm9_haplotypes.${type}.tab
-  echo "## homhet         Homozygous (hom) or heterozygous (het) for PRDM9"                      >>prdm9_haplotypes.${type}.tab
-  echo "## allele_1       First PRDM9 allele (Unk = unknown)"                                    >>prdm9_haplotypes.${type}.tab
-  echo "## allele_2       Second PRDM9 allele (Unk = unknown)"                                   >>prdm9_haplotypes.${type}.tab
-  echo "## allele_1_code  ZF code for PRDM9 allele 1 (UU = undetermined ZF)"                     >>prdm9_haplotypes.${type}.tab
-  echo "## allele_2_code  ZF code for PRDM9 allele 2 (UU = undetermined ZF)"                     >>prdm9_haplotypes.${type}.tab
-  echo "## size_1         number of ZFs in allele 1"                                             >>prdm9_haplotypes.${type}.tab
-  echo "## size_2         number of ZFs in allele 2"                                             >>prdm9_haplotypes.${type}.tab
-  echo "## seq_1          nucleotide sequence of allele 1 "                                      >>prdm9_haplotypes.${type}.tab
-  echo "##                (Sequence of undetermined ZF is masked with "U")"                      >>prdm9_haplotypes.${type}.tab
-  echo "## seq_2          nucleotide sequence of allele 2 "                                      >>prdm9_haplotypes.${type}.tab
-  echo "##                (Sequence of undetermined ZF is masked with "U")"                      >>prdm9_haplotypes.${type}.tab
-  echo "## nseqs          number of long reads for this individual"                              >>prdm9_haplotypes.${type}.tab
-  echo "## nzfseqs        number of long reads with an intact ZF-array that coincide with"       >>prdm9_haplotypes.${type}.tab
-  echo "##                the lengths of the two alleles. Max ZF-arryas identified per "         >>prdm9_haplotypes.${type}.tab
-  echo "##                individual = 2,000"                                                    >>prdm9_haplotypes.${type}.tab
-  echo "## is_child       is this individual a child of other individuals in this study"         >>prdm9_haplotypes.${type}.tab
-  echo "##               (for YRI trios)"                                                        >>prdm9_haplotypes.${type}.tab
-
-  grep allele_1_code withkids.tmp                        >>prdm9_haplotypes.${type}.tab
+  grep allele_1_code withkids.tmp                         >prdm9_haplotypes.${type}.tab
   sort -k1,1         withkids.tmp |grep -v allele_1_code >>prdm9_haplotypes.${type}.tab
-
+  
+  if [ "${type}" == "final" ]; then 
+    echo "## Details of PRDM9 diploid genotypes for individuals (from ${type} data)"                >prdm9_haplotypes.${type}.dets
+    echo "## ------------------------------------------------------------------------------------" >>prdm9_haplotypes.${type}.dets  
+    echo "## id             Sample identifier from 1000 genomes or custom ID from non-1KG samples" >>prdm9_haplotypes.${type}.dets
+    echo "## pop            3-letter code for 1KG population (OTH = other)"                        >>prdm9_haplotypes.${type}.dets
+    echo "## homhet         Homozygous (hom) or heterozygous (het) for PRDM9"                      >>prdm9_haplotypes.${type}.dets
+    echo "## allele_1       First PRDM9 allele (Unk = unknown)"                                    >>prdm9_haplotypes.${type}.dets
+    echo "## allele_2       Second PRDM9 allele (Unk = unknown)"                                   >>prdm9_haplotypes.${type}.dets
+    echo "## allele_1_code  ZF code for PRDM9 allele 1 (UU = undetermined ZF)"                     >>prdm9_haplotypes.${type}.dets
+    echo "## allele_2_code  ZF code for PRDM9 allele 2 (UU = undetermined ZF)"                     >>prdm9_haplotypes.${type}.dets
+    echo "## size_1         number of ZFs in allele 1"                                             >>prdm9_haplotypes.${type}.dets
+    echo "## size_2         number of ZFs in allele 2"                                             >>prdm9_haplotypes.${type}.dets
+    echo "## seq_1          nucleotide sequence of allele 1 "                                      >>prdm9_haplotypes.${type}.dets
+    echo "##                (Sequence of undetermined ZF is masked with "U")"                      >>prdm9_haplotypes.${type}.dets
+    echo "## seq_2          nucleotide sequence of allele 2 "                                      >>prdm9_haplotypes.${type}.dets
+    echo "##                (Sequence of undetermined ZF is masked with "U")"                      >>prdm9_haplotypes.${type}.dets
+    echo "## nseqs          number of long reads for this individual"                              >>prdm9_haplotypes.${type}.dets
+    echo "## nzfseqs        number of long reads with an intact ZF-array that coincide with"       >>prdm9_haplotypes.${type}.dets
+    echo "##                the lengths of the two alleles. Max ZF-arryas identified per "         >>prdm9_haplotypes.${type}.dets
+    echo "##                individual = 2,000"                                                    >>prdm9_haplotypes.${type}.dets
+    echo "## is_child       is this individual a child of other individuals in this study"         >>prdm9_haplotypes.${type}.dets
+    echo "##               (for YRI trios)"                                                        >>prdm9_haplotypes.${type}.dets
+    
+    grep allele_1_code withkids.tmp                        >>prdm9_haplotypes.${type}.dets
+    sort -k1,1         withkids.tmp |grep -v allele_1_code >>prdm9_haplotypes.${type}.dets
+    
+    cp prdm9_haplotypes.${type}.dets File_S1_PRDM9_genotypes.txt
+  fi
+  
   touch newAlleles.txt
   touch newZFs.txt
-
-  if [ "${type}" == "final" ]; then 
-    cp prdm9_haplotypes.${type}.tab File_S1_PRDM9_genotypes.txt
-  fi
   """
   }
 
@@ -675,10 +664,15 @@ process inferRelatednessOfAlleles{
   """
   ln -s ${params.accessorydir} accessoryFiles
 
-  cp ${params.accessorydir}/scripts/checkForRecombinants.pl .
-  cp ${params.accessorydir}/scripts/checkPrdm9BiParentalRecombinants.pl .
-  
-  perl checkForRecombinants.pl --allele ${alleles_to_check} >PrZFA_relatedness_graph.${randID}.tab
+  ## OLD WAY: 
+  #cp ${params.accessorydir}/scripts/checkForRecombinants.pl .
+  #cp ${params.accessorydir}/scripts/checkPrdm9BiParentalRecombinants.pl .
+  #perl checkForRecombinants.pl --allele ${alleles_to_check} >PrZFA_relatedness_graph.${randID}.tab
+
+  grep -vP '^(#|ID)' PrZFA_alleles.details.txt |cut -f1,6 |perl -lane 'print ">\$F[0]\\n\$F[1]"' |fold -w 84 >allAlleles.fa
+  cp ${params.accessorydir}/scripts/infer_PRDM9_template_switches.pl .
+  perl infer_PRDM9_template_switches.pl --c ${alleles_to_check} --f allAlleles.fa \
+                                        --legdets --nohead --nowarn >PrZFA_relatedness_graph.${randID}.tab
   """
   }
 
@@ -995,7 +989,13 @@ process dnaToPeptide{
   paste ABDhits.txt CBDhits.txt |cut -f1,2,4 >>AC_BDhits.txt
 
   paste ABDhits.txt CBDhits.txt |cut -f1,2,4 |perl -lane 'BEGIN{print "allele\ttype"};
-                                              print join("\\t",\$F[0], \$F[1], \$F[2], (\$F[1]<\$F[2]?"A":"C"))' |sort >PrZFA_alleles.ACtype.txt
+                                              print join("\\t",\$F[0], \$F[1], \$F[2], (\$F[1]<\$F[2]?"A":"C"))' |sort -k1,1 >PrZFA_alleles.ACtype.tmp
+                                              
+  ## Assure alleles that have no BLAST alignment (So far, N = 1, Av:0122) are not omitted from final dataset 
+  grep -P '^([A-M](\\d*)|baudat\\S+|\\S+v\\:\\S+\\d+:\\S+:\\S+)\\s' ${PrZFA_alleles} |sort -k1,1 >allPublishedAlleles.lst
+  
+  join -a 1 allPublishedAlleles.lst PrZFA_alleles.ACtype.tmp  |perl -pi -e 's/\\s+(\\S)/\\t\$1/g' |\
+             perl -lane 'if (\$#F < 6){print join("\\t",\$F[0],NA,NA,NA)}else{print join("\\t",\$F[0],@F[4..6])}' >PrZFA_alleles.ACtype.txt
 
   echo -e "#ID               PRDM9 allele long ID"                                     >PrZFA_alleles.details.txt
   echo -e "#short_ID         PRDM9 allele short ID (for alleles from Jeffreys 2013)"  >>PrZFA_alleles.details.txt
@@ -1308,7 +1308,7 @@ workflow faToGenotype{
 
   main:
   just_ZF_fastas = extractZFsfromRawFA(name,
-                                       fa.collate(10),
+                                       fa.collate(2),
                                        publishedZFs,
                                        publishedAlleles)
 
@@ -1387,7 +1387,6 @@ workflow genotypeFromMerge {
 workflow {
 
   aData    = get_known_human_prdm9_data()
-  bsAlleles = get_jeffreys_blood_and_sperm_variants_only()
   
   gt_pacbio   = genotypeFromPacbio(aData.hsZFs,aData.hsAlleles)
   gt_nanopore = genotypeFromONT(aData.hsZFs,aData.hsAlleles)
@@ -1401,8 +1400,8 @@ workflow {
 
   // Infer alleles that bind common seqs
   //prZFAA    = assessZFsThatBindSimilarSequences(prZFAData.allele,prZFAData.zf)
-  prZFAA    = dnaToPeptide(prZFAData.allele, prZFAData.zf, bsAlleles.alleles)
-  ac        = makeACtypesPlot(prZFAA.alleles, prZFAA.zfs, bsAlleles.alleles)
+  prZFAA    = dnaToPeptide(prZFAData.allele, prZFAData.zf, aData.bsAll)
+  ac        = makeACtypesPlot(prZFAA.alleles, prZFAA.zfs, aData.bsAll)
 
   trioGTs       = checkTrios(gt_final)
   newGTs        = parseNewGTsONLY(gt_final)
@@ -1414,7 +1413,7 @@ workflow {
   fig2Data  = drawFigure2(gt_final, prZFAA.alleles)
 
   // Human PrZFA network
-  prZFARel  = inferRelatednessOfAlleles(prZFAData.names.splitText( by: 8, file: true ),prZFAA.alleles)
+  prZFARel  = inferRelatednessOfAlleles(prZFAData.names.splitText( by: 1, file: true ),prZFAA.alleles)
   
   // merge relatedness files
   allRelatednessData = prZFARel.pub.collectFile(name: 'PrZFA_relatedness_ALLhuman.tab', newLine: true)
@@ -1422,7 +1421,7 @@ workflow {
   fig3Data  = drawRelatednessFigure(prZFARel.pub.collect(), 
                                     prZFAData.allele,
                                     prZFAA.alleles,
-                                    bsAlleles.alleles,
+                                    aData.bsAll,
                                     gt_final)
 
   // Analysis of linked haplotypes
